@@ -790,6 +790,8 @@ let cart = [];              // klient-side, nie trafia do bazy
 let editingId = null;
 let pendingImgData = null;
 let scannerMode = null;     // 'sell', 'stock', 'modal'
+let hwScanBuf = '';         // bufor klawiszy z czytnika HW
+let hwScanTs  = 0;          // timestamp ostatniego znaku (ms)
 let npValue = '';
 let activeCategory = 'Wszystkie';
 let currentUser          = null;
@@ -1100,6 +1102,8 @@ async function init() {
 
   // Zsynchronizuj oczekujące sprzedaże z poprzedniej sesji offline
   if (isOnline) syncPendingSales();
+
+  initHwScanner();
 }
 
 async function loadProducts() {
@@ -1798,6 +1802,37 @@ async function doImport() {
 }
 
 // ================== SKANER ==================
+function initHwScanner() {
+  const INTERVAL = 60; // ms — max odstęp między znakami czytnika HW (człowiek pisze wolniej)
+  const MIN_LEN  = 4;  // minimalna długość kodu
+
+  document.addEventListener('keydown', (e) => {
+    const ae = document.activeElement;
+    if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+
+    const now = Date.now();
+
+    if (e.key === 'Enter') {
+      if (hwScanBuf.length >= MIN_LEN) {
+        const code = hwScanBuf;
+        hwScanBuf = ''; hwScanTs = 0;
+        const pageId = document.querySelector('.page.active')?.id;
+        const mode = pageId === 'page-sell' ? 'sell' : pageId === 'page-stock' ? 'stock' : null;
+        if (mode) { scannerMode = mode; handleScannedCode(code); }
+      } else {
+        hwScanBuf = '';
+      }
+      return;
+    }
+
+    if (e.key.length === 1) {
+      if (hwScanBuf.length > 0 && (now - hwScanTs) > INTERVAL) hwScanBuf = '';
+      hwScanBuf += e.key;
+      hwScanTs = now;
+    }
+  });
+}
+
 function openScanner(mode) {
   scannerMode = mode;
   const input = document.getElementById('scanInput');
