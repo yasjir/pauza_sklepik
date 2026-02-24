@@ -8,7 +8,7 @@ import json
 from datetime import datetime, timezone
 from functools import wraps
 
-from flask import Flask, request, jsonify, render_template, redirect, url_for, send_file
+from flask import Flask, request, jsonify, render_template, redirect, url_for, send_file, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import (
     LoginManager, UserMixin,
@@ -206,6 +206,21 @@ def api_me():
 def api_ping():
     """Lekki endpoint do sprawdzenia łączności — bez autoryzacji."""
     return jsonify({'ok': True})
+
+
+@app.route('/sw.js')
+def service_worker():
+    """SW serwowany z / — Service-Worker-Allowed rozszerza scope na całą aplikację."""
+    response = send_from_directory('static', 'sw.js')
+    response.headers['Service-Worker-Allowed'] = '/'
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return response
+
+
+@app.route('/manifest.json')
+def manifest():
+    """Manifest PWA serwowany z roota."""
+    return send_from_directory('static', 'manifest.json')
 
 
 # ============================================================
