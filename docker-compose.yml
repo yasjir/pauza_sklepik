@@ -1,0 +1,11 @@
+services:
+  app:
+    build: .
+    ports:
+      - "6060:6060"
+    volumes:
+      # Baza danych SQLite persystuje w katalogu ./data na hoście
+      - ./data:/app/data
+    env_file:
+      - .env
+    restart: unless-stopped
