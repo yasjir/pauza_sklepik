@@ -10,6 +10,8 @@ Projekt istnieje w dwóch wersjach:
 - `sklepik_pro.html` — oryginalna statyczna wersja offline (localStorage, brak serwera)
 - **wersja z backendem** (aktywna) — Flask + SQLAlchemy, wspólna baza dla wielu tabletów, **z trybem offline dla sprzedaży**
 
+Wersja z backendem działa jako **PWA (Progressive Web App)** — instalowalna z Chrome na Androidzie, działa w pełni offline po pierwszej wizycie (service worker cachuje cały UI shell).
+
 ## Jak uruchomić
 
 ```bash
@@ -52,21 +54,66 @@ SPA (vanilla JS). Bazuje na `sklepik_pro.html` z następującymi zmianami:
 - Nowa zakładka **Konta** (widoczna tylko dla adminów)
 - Zakładki Magazyn/Backup/Konta ukryte dla sprzedawców
 - **Tryb offline** — sprzedaż działa bez internetu, auto-sync po powrocie połączenia
+- **PWA** — rejestruje service worker przy starcie; toast gdy dostępna aktualizacja
 
 ### Strona logowania — `templates/login.html`
 
 Minimalistyczna, pasuje stylem do głównej apki. Używa `fetch()` do `POST /login`.
 
+### Zasoby statyczne — `static/`
+
+Wszystkie zewnętrzne zależności są **self-hosted** (brak CDN) — warunek konieczny dla offline:
+
+```
+static/
+├── manifest.json          # Manifest PWA
+├── sw.js                  # Service worker (serwowany przez /sw.js w app.py)
+├── fonts/
+│   ├── FredokaOne-Regular.woff2
+│   ├── Nunito-latin.woff2       # subset latin (zawiera ó)
+│   └── Nunito-latin-ext.woff2  # subset latin-ext (ą, ę, ś, ł, ź, ż, ć, ń)
+├── zxing/
+│   └── zxing.min.js       # @zxing/library 0.19.1 UMD (jsDelivr)
+└── icons/
+    ├── icon-192.png
+    └── icon-512.png
+```
+
+`generate_icons.py` — jednorazowy skrypt (wymaga Pillow) do regeneracji ikon PWA.
+
+## PWA i instalacja na tablecie
+
+Aplikacja spełnia kryteria PWA — Chrome na Androidzie proponuje "Dodaj do ekranu głównego" po zalogowaniu. Po instalacji uruchamia się bez paska przeglądarki (`display: standalone`).
+
+**Instalacja na Samsung Galaxy Tab S10 FE:**
+1. Otwórz Chrome → wejdź na URL aplikacji → zaloguj się
+2. Chrome pokaże baner "Dodaj do ekranu głównego" (lub menu ⋮ → Dodaj)
+3. Gotowe — aplikacja działa w pełni offline od tej chwili
+
+**Service worker (`static/sw.js`):**
+- Strategia Cache-First dla UI shell: `/app`, `/login`, fonty, ZXing
+- Network-Only dla `/api/*` — IndexedDB obsługuje offline dla danych (patrz niżej)
+- `CACHE_NAME = 'sklepik-v1'` — zmień przy każdym deploymencie żeby wymusić aktualizację
+- `Service-Worker-Allowed: /` header w route `/sw.js` — umożliwia scope na całą aplikację mimo serwowania z `/static/`
+
+**Aktualizacja po deploymencie:** zmień `CACHE_NAME` w `static/sw.js` (`v1` → `v2` itd.). Chrome wykryje zmianę przy następnym otwarciu, zainstaluje nową wersję w tle i pokaże toast użytkownikowi.
+
+---
+
 ## Tryb offline
 
-Aplikacja obsługuje przerwy w połączeniu internetowym:
+Aplikacja obsługuje przerwy w połączeniu internetowym na dwóch poziomach:
+
+**Poziom 1 — Service Worker (UI shell):** HTML, JS, CSS, fonty, ZXing cachowane lokalnie — aplikacja ładuje się bez sieci nawet przy zimnym starcie tabletu.
+
+**Poziom 2 — IndexedDB (dane):** produkty, kolejka sprzedaży, sesja użytkownika.
 
 **Co działa offline:** tylko zakładka Sprzedaż
 
-**Co wymaga internetu:** logowanie, Magazyn, Raporty, Konta/Backup
+**Co wymaga internetu:** logowanie (pierwsze), Magazyn, Raporty, Konta/Backup
 
-**Mechanizm:**
-- `offlineDB` (IndexedDB `sklepik-offline`) — 3 stores:
+**Mechanizm IndexedDB:**
+- `offlineDB` (IndexedDB `sklepik-offline`, v1) — 3 stores:
   - `products` — cache produktów z API (z obrazami base64); aktualizowany przy każdym `loadProducts()`
   - `pending_sales` — kolejka sprzedaży do synchronizacji (autoIncrement `localId`)
   - `user` — cache zalogowanego użytkownika (umożliwia restart tabletu offline)
@@ -88,6 +135,8 @@ Wszystkie (poza `/api/ping`) wymagają aktywnej sesji (401 → redirect do login
 | Metoda | Ścieżka | Opis |
 |---|---|---|
 | GET | `/api/ping` | Sprawdzenie łączności — **bez autoryzacji** |
+| GET | `/sw.js` | Service worker PWA — `no-cache`, `Service-Worker-Allowed: /` |
+| GET | `/manifest.json` | Manifest PWA |
 | GET | `/api/me` | Info o zalogowanym użytkowniku |
 | GET | `/api/products` | Lista wszystkich produktów |
 | POST | `/api/products` | Dodaj produkt `[admin]` |
@@ -147,6 +196,10 @@ Wszystkie (poza `/api/ping`) wymagają aktywnej sesji (401 → redirect do login
 - `startProbeLoop()` / `stopProbeLoop()` — sondowanie co 15s gdy offline
 
 ## Typowe zadania
+
+**Wymuś aktualizację PWA po deploymencie:** zmień `CACHE_NAME` w `static/sw.js` (np. `'sklepik-v1'` → `'sklepik-v2'`). Chrome wykrywa zmianę sw.js przy każdym otwarciu (nagłówek `no-cache`).
+
+**Zmień ikonę aplikacji:** edytuj `generate_icons.py`, uruchom `python3 -m venv /tmp/v && /tmp/v/bin/pip install pillow -q && /tmp/v/bin/python3 generate_icons.py`, potem bump `CACHE_NAME` w `sw.js`.
 
 **Dodaj nową kategorię produktu:** brak zmian w kodzie — kategorie są auto-generowane z pola `product.category`.
 
