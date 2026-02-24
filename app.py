@@ -5,6 +5,8 @@
 import os
 import io
 import json
+import time
+from collections import defaultdict
 from datetime import datetime, timezone
 from functools import wraps
 
@@ -15,6 +17,22 @@ from flask_login import (
     login_user, logout_user, login_required, current_user,
 )
 from werkzeug.security import generate_password_hash, check_password_hash
+
+
+# ============================================================
+# RATE LIMITING (ochrona przed brute-force na /login)
+# ============================================================
+
+_login_attempts: dict = defaultdict(list)
+
+def _check_login_rate(ip: str, limit: int = 10, window: int = 60) -> bool:
+    """Zwraca False jeśli IP przekroczyło limit prób w oknie czasowym."""
+    now = time.time()
+    _login_attempts[ip] = [t for t in _login_attempts[ip] if now - t < window]
+    if len(_login_attempts[ip]) >= limit:
+        return False
+    _login_attempts[ip].append(now)
+    return True
 
 
 # ============================================================
@@ -46,10 +64,11 @@ login_manager.login_view = 'login_page'
 
 class User(UserMixin, db.Model):
     """Użytkownik systemu — sprzedawca lub admin."""
-    id            = db.Column(db.Integer, primary_key=True)
-    username      = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(256), nullable=False)
-    is_admin      = db.Column(db.Boolean, default=False)
+    id                   = db.Column(db.Integer, primary_key=True)
+    username             = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash        = db.Column(db.String(256), nullable=False)
+    is_admin             = db.Column(db.Boolean, default=False)
+    must_change_password = db.Column(db.Boolean, default=False, nullable=True)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -58,7 +77,12 @@ class User(UserMixin, db.Model):
         return check_password_hash(self.password_hash, password)
 
     def to_dict(self):
-        return {'id': self.id, 'username': self.username, 'is_admin': self.is_admin}
+        return {
+            'id':                   self.id,
+            'username':             self.username,
+            'is_admin':             self.is_admin,
+            'must_change_password': bool(self.must_change_password),
+        }
 
 
 class Product(db.Model):
@@ -127,6 +151,24 @@ class SaleItem(db.Model):
         }
 
 
+class AuditLog(db.Model):
+    """Audit log — krytyczne akcje adminów i logowania."""
+    id       = db.Column(db.Integer, primary_key=True)
+    ts       = db.Column(db.BigInteger, nullable=False)
+    user_id  = db.Column(db.Integer, nullable=True)
+    username = db.Column(db.String(80), nullable=True)   # snapshot — user może być usunięty
+    action   = db.Column(db.String(100), nullable=False)
+    detail   = db.Column(db.String(500), default='')
+
+    def to_dict(self):
+        return {
+            'ts':       self.ts,
+            'username': self.username or '?',
+            'action':   self.action,
+            'detail':   self.detail,
+        }
+
+
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, int(user_id))
@@ -144,6 +186,20 @@ def admin_required(f):
             return jsonify({'error': 'Brak uprawnień admina'}), 403
         return f(*args, **kwargs)
     return decorated
+
+
+def log_action(action: str, detail: str = '') -> None:
+    """Zapisuje wpis audit logu do bieżącej sesji DB. Commit należy do wywołującego."""
+    now = datetime.now(timezone.utc)
+    uname = current_user.username if current_user.is_authenticated else None
+    uid   = current_user.id       if current_user.is_authenticated else None
+    db.session.add(AuditLog(
+        ts       = int(now.timestamp() * 1000),
+        user_id  = uid,
+        username = uname,
+        action   = action,
+        detail   = str(detail)[:500],
+    ))
 
 
 # ============================================================
@@ -170,9 +226,18 @@ def login_page():
     username = data.get('username', '').strip()
     password = data.get('password', '')
 
+    # Rate limiting — max 10 prób logowania na minutę per IP
+    ip = request.headers.get('X-Forwarded-For', request.remote_addr or '').split(',')[0].strip()
+    if not _check_login_rate(ip):
+        if request.is_json:
+            return jsonify({'error': 'Za dużo prób logowania. Poczekaj minutę i spróbuj ponownie.'}), 429
+        return render_template('login.html', error='Za dużo prób logowania. Poczekaj minutę i spróbuj ponownie.')
+
     user = User.query.filter_by(username=username).first()
     if user and user.check_password(password):
         login_user(user, remember=True)
+        log_action('LOGIN', f'Logowanie: {user.username}')
+        db.session.commit()
         if request.is_json:
             return jsonify({'ok': True, 'user': user.to_dict()})
         return redirect(url_for('app_page'))
@@ -249,6 +314,7 @@ def add_product():
         img      = d.get('img', ''),
     )
     db.session.add(p)
+    log_action('PRODUCT_ADD', f'Dodano produkt: {p.name}, cena: {p.price} gr')
     db.session.commit()
     return jsonify(p.to_dict()), 201
 
@@ -268,6 +334,7 @@ def update_product(pid):
     p.barcode  = d.get('barcode',  p.barcode)
     p.category = d.get('category', p.category)
     p.img      = d.get('img',      p.img)
+    log_action('PRODUCT_EDIT', f'Edytowano produkt: {p.name} (id={pid})')
     db.session.commit()
     return jsonify(p.to_dict())
 
@@ -279,6 +346,7 @@ def delete_product(pid):
     p = db.session.get(Product, pid)
     if not p:
         return jsonify({'error': 'Nie znaleziono produktu'}), 404
+    log_action('PRODUCT_DELETE', f'Usunięto produkt: {p.name} (id={pid}, cena={p.price} gr, stan={p.stock})')
     db.session.delete(p)
     db.session.commit()
     return jsonify({'ok': True})
@@ -431,7 +499,8 @@ def export_products():
 @admin_required
 def import_backup():
     """
-    Wgraj backup — nadpisuje wszystkie produkty i sprzedaż.
+    Wgraj backup — nadpisuje produkty, opcjonalnie też sprzedaż.
+    Domyślnie historia sprzedaży NIE jest kasowana — wymaga flagi _import_sales=true.
     Akceptuje JSON w body lub plik multipart.
     """
     if request.is_json:
@@ -445,14 +514,24 @@ def import_backup():
         except json.JSONDecodeError:
             return jsonify({'error': 'Nieprawidłowy plik JSON'}), 400
 
-    # Wyczyść stare dane
-    SaleItem.query.delete()
-    Sale.query.delete()
+    products_data = data.get('products', [])
+    sales_data    = data.get('sales', [])
+    import_sales  = bool(data.get('_import_sales', False))
+
+    # Walidacja: backup musi mieć niepustą listę produktów
+    if not isinstance(products_data, list) or len(products_data) == 0:
+        return jsonify({'error': 'Backup nie zawiera produktów — import anulowany dla bezpieczeństwa'}), 400
+
+    # Sprawdź czy każdy produkt ma wymagane pola
+    for i, p in enumerate(products_data):
+        if not isinstance(p, dict) or not p.get('name') or p.get('price') is None:
+            return jsonify({'error': f'Produkt #{i+1} ma nieprawidłowy format (brak name/price)'}), 400
+
+    # Zastąp produkty (zawsze)
     Product.query.delete()
     db.session.flush()
 
-    # Wgraj produkty
-    for p_data in data.get('products', []):
+    for p_data in products_data:
         db.session.add(Product(
             id       = p_data.get('id'),
             name     = p_data['name'],
@@ -464,33 +543,41 @@ def import_backup():
             img      = p_data.get('img', ''),
         ))
 
-    # Wgraj sprzedaż
-    for s_data in data.get('sales', []):
-        sale = Sale(
-            id      = s_data.get('id'),
-            ts      = s_data['ts'],
-            date    = s_data['date'],
-            total   = s_data['total'],
-            paid    = s_data.get('paid', s_data['total']),
-        )
-        db.session.add(sale)
+    # Historia sprzedaży — tylko jeśli admin wyraźnie tego zażądał
+    if import_sales:
+        SaleItem.query.delete()
+        Sale.query.delete()
         db.session.flush()
 
-        for i_data in s_data.get('items', []):
-            db.session.add(SaleItem(
-                sale_id    = sale.id,
-                product_id = i_data.get('id') or i_data.get('product_id'),
-                name       = i_data['name'],
-                emoji      = i_data.get('emoji', '🛒'),
-                qty        = i_data['qty'],
-                price      = i_data['price'],
-            ))
+        for s_data in sales_data:
+            sale = Sale(
+                id      = s_data.get('id'),
+                ts      = s_data['ts'],
+                date    = s_data['date'],
+                total   = s_data['total'],
+                paid    = s_data.get('paid', s_data['total']),
+            )
+            db.session.add(sale)
+            db.session.flush()
 
+            for i_data in s_data.get('items', []):
+                db.session.add(SaleItem(
+                    sale_id    = sale.id,
+                    product_id = i_data.get('id') or i_data.get('product_id'),
+                    name       = i_data['name'],
+                    emoji      = i_data.get('emoji', '🛒'),
+                    qty        = i_data['qty'],
+                    price      = i_data['price'],
+                ))
+
+    log_action('IMPORT', f'Import backupu: {len(products_data)} produktów, '
+                         f'sprzedaż: {"tak" if import_sales else "nie (zachowana)"}')
     db.session.commit()
     return jsonify({
-        'ok':       True,
-        'products': Product.query.count(),
-        'sales':    Sale.query.count(),
+        'ok':            True,
+        'products':      Product.query.count(),
+        'sales':         Sale.query.count(),
+        'sales_replaced': import_sales,
     })
 
 
@@ -524,6 +611,7 @@ def add_user():
     u = User(username=username, is_admin=is_admin)
     u.set_password(password)
     db.session.add(u)
+    log_action('USER_ADD', f'Dodano konto: {username}, admin={is_admin}')
     db.session.commit()
     return jsonify(u.to_dict()), 201
 
@@ -537,6 +625,7 @@ def delete_user(uid):
     u = db.session.get(User, uid)
     if not u:
         return jsonify({'error': 'Nie znaleziono użytkownika'}), 404
+    log_action('USER_DELETE', f'Usunięto konto: {u.username} (id={uid}, admin={u.is_admin})')
     db.session.delete(u)
     db.session.commit()
     return jsonify({'ok': True})
@@ -550,14 +639,32 @@ def change_password(uid):
         return jsonify({'error': 'Brak uprawnień'}), 403
     d = request.get_json()
     password = d.get('password', '')
-    if len(password) < 4:
-        return jsonify({'error': 'Hasło musi mieć co najmniej 4 znaki'}), 400
+    if len(password) < 6:
+        return jsonify({'error': 'Hasło musi mieć co najmniej 6 znaków'}), 400
     u = db.session.get(User, uid)
     if not u:
         return jsonify({'error': 'Nie znaleziono użytkownika'}), 404
+
+    # Przy zmianie własnego hasła wymagaj starego — chyba że wymuszona zmiana (just logged in)
+    if uid == current_user.id and not current_user.must_change_password:
+        old_password = d.get('old_password', '')
+        if not u.check_password(old_password):
+            return jsonify({'error': 'Błędne stare hasło'}), 400
+
     u.set_password(password)
+    u.must_change_password = False
+    log_action('PASSWORD_CHANGE', f'Zmiana hasła dla: {u.username}')
     db.session.commit()
     return jsonify({'ok': True})
+
+
+@app.route('/api/audit', methods=['GET'])
+@login_required
+@admin_required
+def get_audit():
+    """Ostatnie 200 wpisów audit logu."""
+    entries = AuditLog.query.order_by(AuditLog.ts.desc()).limit(200).all()
+    return jsonify([e.to_dict() for e in entries])
 
 
 # ============================================================
@@ -569,11 +676,19 @@ def init_db():
     os.makedirs(_data_dir, exist_ok=True)
     db.create_all()
 
+    # Migracja: dodaj kolumnę must_change_password jeśli brakuje (istniejące bazy danych)
+    with db.engine.connect() as conn:
+        try:
+            conn.execute(db.text('ALTER TABLE "user" ADD COLUMN must_change_password BOOLEAN DEFAULT 0'))
+            conn.commit()
+        except Exception:
+            pass  # kolumna już istnieje
+
     if User.query.count() == 0:
-        admin = User(username='admin', is_admin=True)
+        admin = User(username='admin', is_admin=True, must_change_password=True)
         admin.set_password('admin')
         db.session.add(admin)
-        print('✅ Konto admin/admin zostało utworzone — ZMIEŃ HASŁO po pierwszym logowaniu!')
+        print('✅ Konto admin/admin zostało utworzone — zmiana hasła wymuszona przy pierwszym logowaniu!')
 
     if Product.query.count() == 0:
         demo = [

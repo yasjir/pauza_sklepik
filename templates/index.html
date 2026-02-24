@@ -494,6 +494,7 @@ nav {
       <span id="connectionLabel">Online</span>
     </div>
     <span class="header-username" id="headerUsername">—</span>
+    <button class="btn-logout" onclick="openPasswordModal()" title="Zmień hasło">🔑</button>
     <a href="/logout" class="btn-logout">Wyloguj</a>
   </div>
 </header>
@@ -632,6 +633,10 @@ nav {
       <input type="file" id="importFile" accept=".json" style="display:none" onchange="previewImport(this)">
       <div id="importPreview" style="display:none;background:var(--bg);border-radius:12px;padding:14px;margin-bottom:12px;font-size:0.88rem">
         <div id="importPreviewText"></div>
+        <label style="display:flex;align-items:center;gap:10px;margin-top:12px;font-weight:700;cursor:pointer;font-size:0.88rem;color:var(--red)">
+          <input type="checkbox" id="importSalesCheck" style="width:18px;height:18px;cursor:pointer">
+          Nadpisz też historię sprzedaży (nieodwracalne — kasuje wszystkie transakcje)
+        </label>
       </div>
       <button id="importBtn" onclick="doImport()" style="display:none;width:100%;padding:13px;background:var(--blue);color:white;border:none;border-radius:14px;font-family:'Fredoka One',cursive;font-size:1.1rem;cursor:pointer">
         📥 Wczytaj dane
@@ -723,6 +728,32 @@ nav {
   </div>
 </div>
 
+<!-- ============ MODAL: ZMIANA HASŁA ============ -->
+<div class="overlay hidden" id="passwordOverlay">
+  <div class="modal">
+    <div class="modal-title" id="passwordModalTitle">🔑 Zmień hasło</div>
+    <div id="passwordForcedInfo" style="display:none;background:#FFF3CD;border-radius:12px;padding:12px 14px;margin-bottom:16px;font-size:0.88rem;color:#856404;font-weight:700">
+      ⚠️ Musisz ustawić nowe hasło przed kontynuowaniem. Domyślne hasło <b>admin/admin</b> jest niebezpieczne.
+    </div>
+    <div class="fg" id="passwordOldField">
+      <label>Stare hasło *</label>
+      <input type="password" id="pwOld" placeholder="Twoje obecne hasło">
+    </div>
+    <div class="fg">
+      <label>Nowe hasło *</label>
+      <input type="password" id="pwNew" placeholder="min. 6 znaków">
+    </div>
+    <div class="fg">
+      <label>Powtórz nowe hasło *</label>
+      <input type="password" id="pwConfirm" placeholder="takie samo jak wyżej">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" id="passwordCancelBtn" onclick="closePasswordModal()">Anuluj</button>
+      <button class="btn-modal-save" onclick="changeMyPassword()">💾 Zapisz hasło</button>
+    </div>
+  </div>
+</div>
+
 <!-- SCANNER: ukryty input do zdjęcia -->
 <input type="file" id="scanInput" accept="image/*" capture="environment" style="display:none" onchange="processScanImage(this)">
 
@@ -742,6 +773,17 @@ nav {
 <div class="toast" id="toast"></div>
 
 <script>
+// ================== ESCAPOWANIE HTML (ochrona przed XSS) ==================
+function h(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g,  '&amp;')
+    .replace(/</g,  '&lt;')
+    .replace(/>/g,  '&gt;')
+    .replace(/"/g,  '&quot;')
+    .replace(/'/g,  '&#039;');
+}
+
 // ================== STAN GLOBALNY ==================
 let products = [];          // ładowane z API
 let cart = [];              // klient-side, nie trafia do bazy
@@ -750,8 +792,9 @@ let pendingImgData = null;
 let scannerMode = null;     // 'sell', 'stock', 'modal'
 let npValue = '';
 let activeCategory = 'Wszystkie';
-let currentUser = null;
-let importData = null;
+let currentUser          = null;
+let currentUserFromCache = false;   // true gdy załadowany z IndexedDB offline
+let importData           = null;
 let isOnline = true;          // aktualny stan połączenia
 let probeInterval = null;     // handle setInterval dla sondowania offline
 let syncInProgress = false;   // blokada przed równoczesną synchronizacją
@@ -1014,11 +1057,14 @@ async function init() {
   try {
     currentUser = await api('GET', '/api/me');
     if (!currentUser) return;
-    offlineDB.saveCurrentUser(currentUser).catch(() => {});
+    currentUserFromCache = false;
+    // Cachuj tylko minimalne dane — bez is_admin żeby nie dawać fałszywych uprawnień offline
+    offlineDB.saveCurrentUser({ id: currentUser.id, username: currentUser.username }).catch(() => {});
   } catch (e) {
     if (e.isOffline) {
-      // Brak sieci — spróbuj załadować z cache
+      // Brak sieci — spróbuj załadować z cache (bez is_admin — tylko sprzedaż dostępna offline)
       currentUser = await offlineDB.getCachedUser().catch(() => null);
+      currentUserFromCache = true;
       if (!currentUser) {
         window.location.href = '/login';
         return;
@@ -1030,9 +1076,14 @@ async function init() {
 
   document.getElementById('headerUsername').textContent = currentUser.username;
 
-  // Pokaż elementy admina jeśli admin
-  if (currentUser.is_admin) {
+  // Pokaż elementy admina jeśli admin (tylko gdy dane z serwera — nie z cache offline)
+  if (currentUser.is_admin && !currentUserFromCache) {
     document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'flex');
+  }
+
+  // Wymuś zmianę hasła jeśli admin/admin lub nowe konto z flagą must_change_password
+  if (currentUser.must_change_password) {
+    openPasswordModal(true);
   }
 
   const now = new Date();
@@ -1108,9 +1159,14 @@ function getCategories() {
 
 function renderCategories() {
   const el = document.getElementById('catFilter');
-  el.innerHTML = getCategories().map(c =>
-    `<button class="cat-chip ${c === activeCategory ? 'active' : ''}" onclick="setCategory('${c}')">${c}</button>`
-  ).join('');
+  el.innerHTML = '';
+  getCategories().forEach(c => {
+    const btn = document.createElement('button');
+    btn.className = 'cat-chip' + (c === activeCategory ? ' active' : '');
+    btn.textContent = c;
+    btn.addEventListener('click', () => setCategory(c));
+    el.appendChild(btn);
+  });
 }
 
 function setCategory(cat) {
@@ -1135,19 +1191,45 @@ function renderProducts() {
     return;
   }
 
-  grid.innerHTML = list.map(p => {
+  grid.innerHTML = '';
+  list.forEach(p => {
     const stockLabel = p.stock === 0 ? 'Brak' : p.stock <= 3 ? `Ostatnie ${p.stock}` : `${p.stock} szt.`;
     const pillClass  = p.stock === 0 ? 'empty' : p.stock <= 3 ? 'low' : '';
-    const thumb = p.img
-      ? `<img class="prod-img" src="${p.img}" alt="${p.name}">`
-      : `<span class="prod-emoji">${p.emoji || '🛒'}</span>`;
-    return `<div class="prod-card ${p.stock === 0 ? 'unavailable' : ''}" onclick="${p.stock > 0 ? 'addToCart(' + p.id + ')' : ''}">
-      <span class="stock-pill ${pillClass}">${stockLabel}</span>
-      ${thumb}
-      <div class="prod-name">${p.name}</div>
-      <div class="prod-price">${fPLN(p.price)}</div>
-    </div>`;
-  }).join('');
+
+    const card = document.createElement('div');
+    card.className = 'prod-card' + (p.stock === 0 ? ' unavailable' : '');
+    if (p.stock > 0) card.addEventListener('click', () => addToCart(p.id));
+
+    const pill = document.createElement('span');
+    pill.className = 'stock-pill' + (pillClass ? ' ' + pillClass : '');
+    pill.textContent = stockLabel;
+    card.appendChild(pill);
+
+    if (p.img) {
+      const img = document.createElement('img');
+      img.className = 'prod-img';
+      img.src = p.img;
+      img.alt = p.name;
+      card.appendChild(img);
+    } else {
+      const emoji = document.createElement('span');
+      emoji.className = 'prod-emoji';
+      emoji.textContent = p.emoji || '🛒';
+      card.appendChild(emoji);
+    }
+
+    const name = document.createElement('div');
+    name.className = 'prod-name';
+    name.textContent = p.name;
+    card.appendChild(name);
+
+    const price = document.createElement('div');
+    price.className = 'prod-price';
+    price.textContent = fPLN(p.price);
+    card.appendChild(price);
+
+    grid.appendChild(card);
+  });
 }
 
 // ================== CART ==================
@@ -1193,10 +1275,10 @@ function renderCart() {
     const sub   = p.price * item.qty;
     const thumb = p.img
       ? `<img class="cr-thumb" src="${p.img}" alt="">`
-      : `<div class="cr-thumb">${p.emoji || '🛒'}</div>`;
+      : `<div class="cr-thumb">${h(p.emoji || '🛒')}</div>`;
     return `<div class="cart-row">
       ${thumb}
-      <div class="cr-name">${p.name}</div>
+      <div class="cr-name">${h(p.name)}</div>
       <div class="qty-ctrl">
         <button class="qty-btn" onclick="changeQty(${p.id}, -1)">−</button>
         <span class="qty-num">${item.qty}</span>
@@ -1361,14 +1443,14 @@ function renderStock() {
       : '<span class="badge badge-ok">OK</span>';
     const thumb = p.img
       ? `<img class="sc-img" src="${p.img}" alt="">`
-      : `<div class="sc-emoji">${p.emoji || '🛒'}</div>`;
+      : `<div class="sc-emoji">${h(p.emoji || '🛒')}</div>`;
     return `<div class="stock-card">
       <div class="sc-top">
         ${thumb}
         <div class="sc-info">
-          <div class="sc-name">${p.name}</div>
+          <div class="sc-name">${h(p.name)}</div>
           <div class="sc-price">${fPLN(p.price)}</div>
-          ${p.barcode ? `<div class="sc-barcode">📊 ${p.barcode}</div>` : ''}
+          ${p.barcode ? `<div class="sc-barcode">📊 ${h(p.barcode)}</div>` : ''}
         </div>
       </div>
       <div class="sc-stock-row">
@@ -1523,20 +1605,30 @@ async function renderUsers() {
   const data = await api('GET', '/api/users');
   if (!data) return;
   const grid = document.getElementById('usersGrid');
-  grid.innerHTML = data.map(u => `
-    <div class="user-card">
+  grid.innerHTML = '';
+  data.forEach(u => {
+    const card = document.createElement('div');
+    card.className = 'user-card';
+    card.innerHTML = `
       <div class="user-avatar ${u.is_admin ? 'admin' : 'staff'}">${u.is_admin ? '👑' : '🧑'}</div>
       <div class="user-info">
-        <div class="user-name">${u.username}</div>
+        <div class="user-name"></div>
         <div class="user-role">${u.is_admin ? 'Administrator' : 'Sprzedawca'}</div>
       </div>
-      <div class="user-actions">
-        ${u.id !== currentUser.id
-          ? `<button class="sm-btn sm-red" onclick="deleteUser(${u.id}, '${u.username}')">🗑️ Usuń</button>`
-          : '<span style="font-size:0.75rem;color:var(--muted)">to Ty</span>'}
-      </div>
-    </div>
-  `).join('');
+      <div class="user-actions"></div>`;
+    card.querySelector('.user-name').textContent = u.username;
+    const actions = card.querySelector('.user-actions');
+    if (u.id !== currentUser.id) {
+      const btn = document.createElement('button');
+      btn.className = 'sm-btn sm-red';
+      btn.textContent = '🗑️ Usuń';
+      btn.addEventListener('click', () => deleteUser(u.id, u.username));
+      actions.appendChild(btn);
+    } else {
+      actions.innerHTML = '<span style="font-size:0.75rem;color:var(--muted)">to Ty</span>';
+    }
+    grid.appendChild(card);
+  });
 }
 
 function openUserModal() {
@@ -1601,7 +1693,7 @@ async function renderReport() {
     return;
   }
   tbody.innerHTML = daySales.map(s => {
-    const itemsStr = s.items.map(i => `${i.emoji || ''} ${i.name} ×${i.qty}`).join(', ');
+    const itemsStr = s.items.map(i => `${h(i.emoji || '')} ${h(i.name)} ×${i.qty}`).join(', ');
     const change   = (s.paid || s.total) - s.total;
     return `<tr>
       <td style="white-space:nowrap">${fTime(s.ts)}</td>
@@ -1619,6 +1711,43 @@ async function renderReport() {
 
 function doPrint() { renderReport().then(() => window.print()); }
 
+// ================== ZMIANA HASŁA ==================
+function openPasswordModal(forced = false) {
+  ['pwOld', 'pwNew', 'pwConfirm'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('passwordForcedInfo').style.display = forced ? 'block' : 'none';
+  document.getElementById('passwordModalTitle').textContent   = forced ? '🔑 Ustaw nowe hasło' : '🔑 Zmień hasło';
+  document.getElementById('passwordOldField').style.display   = forced ? 'none' : 'block';
+  document.getElementById('passwordCancelBtn').style.display  = forced ? 'none' : '';
+  document.getElementById('passwordOverlay').classList.remove('hidden');
+}
+
+function closePasswordModal() {
+  document.getElementById('passwordOverlay').classList.add('hidden');
+}
+
+async function changeMyPassword() {
+  const pwNew     = document.getElementById('pwNew').value;
+  const pwConfirm = document.getElementById('pwConfirm').value;
+  const pwOld     = document.getElementById('pwOld').value;
+
+  if (pwNew.length < 6)         { showToast('❌ Hasło musi mieć min. 6 znaków', 'red'); return; }
+  if (pwNew !== pwConfirm)      { showToast('❌ Hasła nie są takie same', 'red'); return; }
+
+  const body = { password: pwNew };
+  if (document.getElementById('passwordOldField').style.display !== 'none') {
+    body.old_password = pwOld;
+  }
+
+  try {
+    await api('PUT', `/api/users/${currentUser.id}/password`, body);
+    closePasswordModal();
+    currentUser.must_change_password = false;
+    showToast('✅ Hasło zostało zmienione', 'green');
+  } catch (e) {
+    showToast('❌ ' + e.message, 'red');
+  }
+}
+
 // ================== BACKUP ==================
 function previewImport(input) {
   const file = input.files[0];
@@ -1632,7 +1761,7 @@ function previewImport(input) {
       const sCount = (importData.sales    || []).length;
       const date   = importData.exportedAt ? new Date(importData.exportedAt).toLocaleString('pl-PL') : 'nieznana';
       document.getElementById('importPreviewText').innerHTML =
-        `<b>📦 Produktów:</b> ${pCount}<br><b>🧾 Transakcji:</b> ${sCount}<br><b>📅 Data backupu:</b> ${date}`;
+        `<b>📦 Produktów:</b> ${pCount}<br><b>🧾 Transakcji:</b> ${sCount}<br><b>📅 Data backupu:</b> ${h(date)}`;
       document.getElementById('importPreview').style.display = 'block';
       document.getElementById('importBtn').style.display     = 'block';
     } catch {
@@ -1645,17 +1774,24 @@ function previewImport(input) {
 
 async function doImport() {
   if (!importData) return;
-  if (!confirm(`Wczytać backup?\n\nNadpisze wszystkie produkty i transakcje!\n\nNie można cofnąć!`)) return;
+  const importSales = document.getElementById('importSalesCheck').checked;
+  const msg = importSales
+    ? `Wczytać backup?\n\n⚠️ Nadpisze produkty ORAZ całą historię transakcji!\n\nNie można cofnąć!`
+    : `Wczytać backup?\n\nNadpisze produkty. Historia transakcji zostanie zachowana.\n\nNie można cofnąć!`;
+  if (!confirm(msg)) return;
   try {
-    const result = await api('POST', '/api/import', importData);
-    document.getElementById('importPreview').style.display = 'none';
-    document.getElementById('importBtn').style.display     = 'none';
-    document.getElementById('importFileName').textContent  = 'Żaden plik nie wybrany';
+    const payload = { ...importData, _import_sales: importSales };
+    const result  = await api('POST', '/api/import', payload);
+    document.getElementById('importPreview').style.display    = 'none';
+    document.getElementById('importBtn').style.display        = 'none';
+    document.getElementById('importFileName').textContent     = 'Żaden plik nie wybrany';
+    document.getElementById('importSalesCheck').checked       = false;
     importData = null;
     await loadProducts();
     renderCategories();
     renderProducts();
-    showToast(`✅ Wczytano ${result.products} produktów i ${result.sales} transakcji!`, 'green');
+    const salesInfo = result.sales_replaced ? ` i ${result.sales} transakcji` : ' (historia zachowana)';
+    showToast(`✅ Wczytano ${result.products} produktów${salesInfo}`, 'green');
   } catch (e) {
     showToast('❌ ' + e.message, 'red');
   }

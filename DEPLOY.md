@@ -41,9 +41,13 @@ git clone https://github.com/TWOJE-REPO/sklepik.git ~/sklepik
 W zakładce **Consoles** otwórz **Bash** i wykonaj:
 ```bash
 cd ~/sklepik
-pip install --user -r requirements.txt
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 mkdir -p data
 ```
+
+> Używamy virtualenv żeby uniknąć konfliktów z innymi pakietami zainstalowanymi w systemie PythonAnywhere (np. `dash`). Jeśli pojawią się ostrzeżenia o konfliktach — możesz je zignorować, o ile dotyczą pakietów spoza tego projektu.
 
 ### 4. Utwórz aplikację webową
 
@@ -60,6 +64,9 @@ sys.path.insert(0, '/home/TWOJA_NAZWA/sklepik')
 
 from app import app as application
 ```
+
+W sekcji **Virtualenv**:
+- Wpisz ścieżkę do venv: `/home/TWOJA_NAZWA/sklepik/venv`
 
 ### 5. Ustaw zmienne środowiskowe
 
