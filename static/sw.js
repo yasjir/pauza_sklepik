@@ -4,7 +4,7 @@
 //
 // Aby wymusić aktualizację po deploymencie: zmień CACHE_NAME (np. sklepik-v2)
 
-const CACHE_NAME = 'sklepik-v2';
+const CACHE_NAME = 'sklepik-v3';
 
 // Zasoby pre-cachowane przy instalacji SW (cały UI shell)
 const PRECACHE_URLS = [
@@ -40,8 +40,8 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
-  // /api/* — nie przechwytuj; IndexedDB w aplikacji obsługuje offline
-  if (url.pathname.startsWith('/api/')) return;
+  // /api/* i /logout — nie przechwytuj; obsługa natywna przez przeglądarkę
+  if (url.pathname.startsWith('/api/') || url.pathname === '/logout') return;
 
   // Tylko GET
   if (event.request.method !== 'GET') return;
@@ -58,10 +58,8 @@ self.addEventListener('fetch', event => {
         }
         return response;
       }).catch(() => {
-        // Brak sieci i brak cache — zwróć główną stronę aplikacji jako fallback
-        if (url.pathname === '/app' || url.pathname === '/login') {
-          return caches.match('/app');
-        }
+        // Brak sieci i brak cache — fallback na stronę logowania
+        return caches.match('/login') || caches.match('/app');
       });
     })
   );
