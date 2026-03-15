@@ -4,14 +4,15 @@
 //
 // Aby wymusić aktualizację po deploymencie: zmień CACHE_NAME (np. sklepik-v2)
 
-const CACHE_NAME = 'sklepik-v4';
+const CACHE_NAME = 'sklepik-v8';
 
 // Zasoby pre-cachowane przy instalacji SW (cały UI shell)
 const PRECACHE_URLS = [
   '/app',
   '/login',
   '/static/zxing/zxing.min.js',
-  '/static/fonts/FredokaOne-Regular.woff2',
+  '/static/fonts/Fredoka-latin.woff2',
+  '/static/fonts/Fredoka-latin-ext.woff2',
   '/static/fonts/Nunito-latin.woff2',
   '/static/fonts/Nunito-latin-ext.woff2',
 ];

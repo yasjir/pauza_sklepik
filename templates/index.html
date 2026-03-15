@@ -12,9 +12,16 @@
 <script src="/static/zxing/zxing.min.js"></script>
 <style>
 @font-face {
-  font-family: 'Fredoka One';
-  src: url('/static/fonts/FredokaOne-Regular.woff2') format('woff2');
-  font-weight: 400; font-style: normal; font-display: swap;
+  font-family: 'Fredoka';
+  src: url('/static/fonts/Fredoka-latin-ext.woff2') format('woff2');
+  font-weight: 300 700; font-style: normal; font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Fredoka';
+  src: url('/static/fonts/Fredoka-latin.woff2') format('woff2');
+  font-weight: 300 700; font-style: normal; font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
   font-family: 'Nunito';
@@ -73,7 +80,7 @@ header {
 }
 
 header h1 {
-  font-family: 'Fredoka One', cursive;
+  font-family: 'Fredoka', 'Nunito', sans-serif;
   font-size: 1.7rem;
   letter-spacing: 1px;
   flex-shrink: 0;
@@ -168,7 +175,7 @@ nav {
 @media (max-width: 700px) { .sell-layout { grid-template-columns: 1fr; } }
 
 .products-section h2 {
-  font-family: 'Fredoka One', cursive;
+  font-family: 'Fredoka', 'Nunito', sans-serif;
   font-size: 1.1rem;
   color: var(--muted);
   margin-bottom: 12px;
@@ -222,7 +229,7 @@ nav {
 .prod-img { width: 72px; height: 72px; border-radius: 14px; object-fit: cover; margin: 0 auto 8px; display: block; }
 .prod-emoji { font-size: 3rem; line-height: 1; margin-bottom: 8px; display: block; }
 .prod-name { font-weight: 800; font-size: 0.85rem; margin-bottom: 5px; line-height: 1.2; }
-.prod-price { font-family: 'Fredoka One', cursive; font-size: 1.1rem; color: var(--primary); }
+.prod-price { font-family: 'Fredoka', 'Nunito', sans-serif; font-size: 1.1rem; color: var(--primary); }
 
 .stock-pill {
   position: absolute; top: 7px; right: 7px;
@@ -237,7 +244,7 @@ nav {
   background: white; border-radius: 20px; box-shadow: var(--shadow);
   padding: 18px; position: sticky; top: 130px;
 }
-.cart-title { font-family: 'Fredoka One', cursive; font-size: 1.2rem; color: var(--text); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+.cart-title { font-family: 'Fredoka', 'Nunito', sans-serif; font-size: 1.2rem; color: var(--text); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
 .cart-items { min-height: 60px; margin-bottom: 12px; }
 .cart-empty { text-align: center; color: var(--muted); padding: 20px 0; font-size: 0.9rem; }
 .cart-row { display: flex; align-items: center; gap: 6px; padding: 7px 0; border-bottom: 1px solid var(--border); }
@@ -251,12 +258,12 @@ nav {
 
 .cart-sum { background: linear-gradient(135deg, #FF6B35, #FF8C42); border-radius: 14px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; color: white; margin-bottom: 12px; }
 .cart-sum .sum-label { font-weight: 700; font-size: 0.9rem; opacity: 0.9; }
-.cart-sum .sum-val { font-family: 'Fredoka One', cursive; font-size: 1.8rem; }
+.cart-sum .sum-val { font-family: 'Fredoka', 'Nunito', sans-serif; font-size: 1.8rem; }
 
 /* NUMPAD */
 .numpad-area { margin-bottom: 10px; }
 .numpad-label { font-size: 0.8rem; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
-.numpad-display { background: var(--bg); border-radius: 12px; padding: 10px 14px; font-family: 'Fredoka One', cursive; font-size: 1.6rem; text-align: right; margin-bottom: 8px; color: var(--text); border: 2px solid var(--border); min-height: 52px; }
+.numpad-display { background: var(--bg); border-radius: 12px; padding: 10px 14px; font-family: 'Fredoka', 'Nunito', sans-serif; font-size: 1.6rem; text-align: right; margin-bottom: 8px; color: var(--text); border: 2px solid var(--border); min-height: 52px; }
 .numpad-display.has-change { color: var(--green-dark); }
 .numpad-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px; }
 .np-btn { padding: 12px; border: none; border-radius: 12px; background: white; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 1.1rem; cursor: pointer; border: 2px solid var(--border); transition: all 0.15s; color: var(--text); }
@@ -268,7 +275,7 @@ nav {
 .qa-btn { padding: 8px 4px; border: 2px solid var(--border); border-radius: 10px; background: white; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 0.82rem; cursor: pointer; color: var(--text); transition: all 0.15s; text-align: center; }
 .qa-btn:active { background: var(--primary); color: white; border-color: var(--primary); }
 
-.btn-finalize { width: 100%; padding: 14px; border: none; border-radius: 14px; background: var(--green); color: white; font-family: 'Fredoka One', cursive; font-size: 1.2rem; cursor: pointer; transition: all 0.2s; letter-spacing: 0.5px; }
+.btn-finalize { width: 100%; padding: 14px; border: none; border-radius: 14px; background: var(--green); color: white; font-family: 'Fredoka', 'Nunito', sans-serif; font-weight: 700; font-size: 1.2rem; cursor: pointer; transition: all 0.2s; letter-spacing: 0.5px; }
 .btn-finalize:hover { background: var(--green-dark); transform: translateY(-1px); }
 .btn-finalize:active { transform: scale(0.97); }
 .btn-clear-cart { width: 100%; padding: 9px; border: none; border-radius: 10px; background: #F8D7DA; color: var(--red); font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 0.85rem; cursor: pointer; margin-top: 7px; transition: background 0.15s; }
@@ -276,7 +283,7 @@ nav {
 
 /* ============ MAGAZYN ============ */
 .stock-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
-.stock-header h2 { font-family: 'Fredoka One', cursive; font-size: 1.3rem; }
+.stock-header h2 { font-family: 'Fredoka', 'Nunito', sans-serif; font-size: 1.3rem; }
 .stock-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
 .stock-card { background: white; border-radius: 18px; padding: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); border: 2px solid transparent; transition: border-color 0.2s; }
 .stock-card:hover { border-color: var(--border); }
@@ -285,7 +292,7 @@ nav {
 .sc-emoji { width: 52px; height: 52px; border-radius: 12px; background: var(--bg); font-size: 2rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .sc-info { flex: 1; }
 .sc-name { font-weight: 800; font-size: 0.95rem; }
-.sc-price { font-family: 'Fredoka One', cursive; color: var(--primary); font-size: 1rem; }
+.sc-price { font-family: 'Fredoka', 'Nunito', sans-serif; color: var(--primary); font-size: 1rem; }
 .sc-stock-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .sc-stock-num { font-weight: 800; font-size: 1rem; }
 .sc-barcode { font-size: 0.75rem; color: var(--muted); font-weight: 600; margin-top: 2px; }
@@ -303,7 +310,7 @@ nav {
 
 /* ============ RAPORT ============ */
 .report-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
-.report-top h2 { font-family: 'Fredoka One', cursive; font-size: 1.3rem; }
+.report-top h2 { font-family: 'Fredoka', 'Nunito', sans-serif; font-size: 1.3rem; }
 .report-controls { display: flex; gap: 10px; align-items: center; }
 .date-input { padding: 9px 14px; border: 2px solid var(--border); border-radius: 12px; font-family: 'Nunito', sans-serif; font-size: 0.95rem; outline: none; background: white; }
 .date-input:focus { border-color: var(--blue); }
@@ -311,7 +318,7 @@ nav {
 .btn-print:hover { background: var(--blue-dark); }
 .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 20px; }
 .stat-box { background: white; border-radius: 18px; padding: 18px 14px; text-align: center; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
-.stat-val { font-family: 'Fredoka One', cursive; font-size: 1.8rem; line-height: 1; margin-bottom: 5px; }
+.stat-val { font-family: 'Fredoka', 'Nunito', sans-serif; font-size: 1.8rem; line-height: 1; margin-bottom: 5px; }
 .stat-lbl { font-size: 0.75rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; }
 .stat-box.s-green .stat-val { color: var(--green-dark); }
 .stat-box.s-blue .stat-val { color: var(--blue); }
@@ -325,7 +332,7 @@ nav {
 
 /* ============ UŻYTKOWNICY ============ */
 .users-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
-.users-header h2 { font-family: 'Fredoka One', cursive; font-size: 1.3rem; }
+.users-header h2 { font-family: 'Fredoka', 'Nunito', sans-serif; font-size: 1.3rem; }
 .users-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
 .user-card { background: white; border-radius: 18px; padding: 18px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); display: flex; align-items: center; gap: 14px; }
 .user-avatar { width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; flex-shrink: 0; }
@@ -340,14 +347,14 @@ nav {
 .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); display: flex; align-items: center; justify-content: center; z-index: 500; backdrop-filter: blur(5px); padding: 16px; }
 .overlay.hidden { display: none; }
 .modal { background: white; border-radius: 24px; padding: 24px; width: 100%; max-width: 420px; max-height: 90vh; overflow-y: auto; box-shadow: 0 24px 60px rgba(0,0,0,0.25); }
-.modal-title { font-family: 'Fredoka One', cursive; font-size: 1.3rem; margin-bottom: 18px; }
+.modal-title { font-family: 'Fredoka', 'Nunito', sans-serif; font-size: 1.3rem; margin-bottom: 18px; }
 .fg { margin-bottom: 14px; }
 .fg label { display: block; font-weight: 700; font-size: 0.82rem; color: var(--muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.4px; }
 .fg input, .fg select { width: 100%; padding: 11px 14px; border: 2px solid var(--border); border-radius: 12px; font-family: 'Nunito', sans-serif; font-size: 0.95rem; outline: none; transition: border-color 0.15s; background: white; }
 .fg input:focus, .fg select:focus { border-color: var(--primary); }
 .modal-actions { display: flex; gap: 10px; margin-top: 18px; }
 .modal-actions button { flex: 1; }
-.btn-modal-save { padding: 13px; background: var(--primary); color: white; border: none; border-radius: 14px; font-family: 'Fredoka One', cursive; font-size: 1.1rem; cursor: pointer; transition: all 0.18s; }
+.btn-modal-save { padding: 13px; background: var(--primary); color: white; border: none; border-radius: 14px; font-family: 'Fredoka', 'Nunito', sans-serif; font-size: 1.1rem; cursor: pointer; transition: all 0.18s; }
 .btn-modal-save:hover { background: var(--primary-dark); }
 .btn-modal-cancel { padding: 13px; background: var(--bg); color: var(--text); border: none; border-radius: 14px; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 1rem; cursor: pointer; }
 .btn-modal-cancel:hover { background: var(--border); }
@@ -357,7 +364,7 @@ nav {
 .scanner-overlay.hidden { display: none; }
 .scanner-bottom { background: #111; padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .scanner-status { color: white; font-weight: 700; font-size: 0.95rem; }
-.btn-scanner-close { padding: 12px 32px; background: var(--red); color: white; border: none; border-radius: 14px; font-family: 'Fredoka One', cursive; font-size: 1.1rem; cursor: pointer; }
+.btn-scanner-close { padding: 12px 32px; background: var(--red); color: white; border: none; border-radius: 14px; font-family: 'Fredoka', 'Nunito', sans-serif; font-size: 1.1rem; cursor: pointer; }
 
 /* TOAST */
 .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--text); color: white; padding: 13px 22px; border-radius: 14px; font-weight: 700; font-size: 0.95rem; box-shadow: 0 8px 30px rgba(0,0,0,0.25); opacity: 0; transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); z-index: 1000; white-space: nowrap; max-width: 90vw; }
@@ -372,7 +379,7 @@ nav {
 .badge-low { background: #FFF3CD; color: #856404; }
 .badge-empty { background: #F8D7DA; color: #721c24; }
 
-.add-btn { padding: 11px 20px; background: var(--primary); color: white; border: none; border-radius: 14px; font-family: 'Fredoka One', cursive; font-size: 1rem; cursor: pointer; transition: all 0.18s; white-space: nowrap; }
+.add-btn { padding: 11px 20px; background: var(--primary); color: white; border: none; border-radius: 14px; font-family: 'Fredoka', 'Nunito', sans-serif; font-size: 1rem; cursor: pointer; transition: all 0.18s; white-space: nowrap; }
 .add-btn:hover { background: var(--primary-dark); transform: translateY(-1px); }
 
 .no-data { text-align: center; padding: 50px; color: var(--muted); font-size: 1rem; }
@@ -414,7 +421,7 @@ nav {
   .stat-box { box-shadow: none; border: 1px solid #ddd; }
 }
 .print-header { display: none; text-align: center; margin-bottom: 20px; padding-bottom: 14px; border-bottom: 2px solid #333; }
-.print-header h2 { font-family: 'Fredoka One', cursive; font-size: 1.5rem; }
+.print-header h2 { font-family: 'Fredoka', 'Nunito', sans-serif; font-size: 1.5rem; }
 .print-header p { color: #555; margin-top: 4px; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -608,11 +615,11 @@ nav {
 <!-- ============ PAGE: BACKUP ============ -->
 <div class="page" id="page-backup">
   <div style="max-width:520px;margin:0 auto">
-    <h2 style="font-family:'Fredoka One',cursive;font-size:1.4rem;margin-bottom:6px">💾 Backup danych</h2>
+    <h2 style="font-family:'Fredoka',cursive;font-size:1.4rem;margin-bottom:6px">💾 Backup danych</h2>
     <p style="color:var(--muted);font-size:0.9rem;margin-bottom:24px">Zapisuj kopię regularnie — najlepiej co tydzień.</p>
 
     <div style="background:white;border-radius:20px;padding:22px;box-shadow:var(--shadow);margin-bottom:16px;border-left:5px solid var(--green)">
-      <div style="font-family:'Fredoka One',cursive;font-size:1.1rem;margin-bottom:8px;color:var(--green-dark)">📤 Eksport — zapisz kopię</div>
+      <div style="font-family:'Fredoka',cursive;font-size:1.1rem;margin-bottom:8px;color:var(--green-dark)">📤 Eksport — zapisz kopię</div>
       <p style="font-size:0.88rem;color:var(--muted);margin-bottom:16px">Pobierze plik <b>.json</b> z produktami i historią sprzedaży.</p>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <a href="/api/export" class="add-btn" style="display:block;text-align:center;text-decoration:none;padding:14px;background:var(--green);border-radius:14px">
@@ -625,7 +632,7 @@ nav {
     </div>
 
     <div style="background:white;border-radius:20px;padding:22px;box-shadow:var(--shadow);margin-bottom:16px;border-left:5px solid var(--blue)">
-      <div style="font-family:'Fredoka One',cursive;font-size:1.1rem;margin-bottom:8px;color:var(--blue-dark)">📥 Import — wczytaj kopię</div>
+      <div style="font-family:'Fredoka',cursive;font-size:1.1rem;margin-bottom:8px;color:var(--blue-dark)">📥 Import — wczytaj kopię</div>
       <p style="font-size:0.88rem;color:var(--muted);margin-bottom:16px">Wczytaj wcześniej zapisany plik backup. <b style="color:var(--red)">Uwaga: nadpisze obecne dane!</b></p>
       <div style="border:2px dashed var(--border);border-radius:14px;padding:20px;text-align:center;margin-bottom:12px;cursor:pointer;background:var(--bg)" onclick="document.getElementById('importFile').click()">
         <div style="font-size:2.5rem;margin-bottom:6px">📂</div>
@@ -640,13 +647,13 @@ nav {
           Nadpisz też historię sprzedaży (nieodwracalne — kasuje wszystkie transakcje)
         </label>
       </div>
-      <button id="importBtn" onclick="doImport()" style="display:none;width:100%;padding:13px;background:var(--blue);color:white;border:none;border-radius:14px;font-family:'Fredoka One',cursive;font-size:1.1rem;cursor:pointer">
+      <button id="importBtn" onclick="doImport()" style="display:none;width:100%;padding:13px;background:var(--blue);color:white;border:none;border-radius:14px;font-family:'Fredoka',cursive;font-size:1.1rem;cursor:pointer">
         📥 Wczytaj dane
       </button>
     </div>
 
     <div style="background:white;border-radius:20px;padding:22px;box-shadow:var(--shadow);border-left:5px solid var(--yellow)">
-      <div style="font-family:'Fredoka One',cursive;font-size:1.1rem;margin-bottom:8px;color:var(--yellow)">⚠️ Kiedy robić backup?</div>
+      <div style="font-family:'Fredoka',cursive;font-size:1.1rem;margin-bottom:8px;color:var(--yellow)">⚠️ Kiedy robić backup?</div>
       <ul style="font-size:0.88rem;color:var(--muted);list-style:none;display:flex;flex-direction:column;gap:8px">
         <li>✅ <b>Co tydzień</b> — regularny backup na Google Drive</li>
         <li>✅ <b>Po dodaniu wielu produktów</b></li>
