@@ -35,19 +35,21 @@ Szczegółowa instrukcja deployu na PythonAnywhere i Render: `DEPLOY.md`.
 Flask + SQLAlchemy + Flask-Login. Celowo wszystko w jednym pliku dla czytelności.
 
 **Modele bazy danych:**
-- `User` — id, username, password_hash, is_admin
+- `User` — id, username, password_hash, is_admin, must_change_password
 - `Product` — id, name, emoji, price (grosze), stock, barcode, category, img (base64)
 - `Sale` — id, ts (ms timestamp), date (YYYY-MM-DD), total, paid, user_id
 - `SaleItem` — id, sale_id, product_id, name, emoji, qty, price (snapshot w momencie sprzedaży)
+- `AuditLog` — id, ts (ms), user_id, username (snapshot), action, detail — krytyczne akcje adminów i logowania
 
 **Baza danych:**
 - Domyślnie SQLite w `./data/sklepik.db`
 - Nadpisywalna przez zmienną środowiskową `DATABASE_URL` (PostgreSQL/MySQL)
-- `init_db()` tworzy tabele i konto `admin/admin` przy pierwszym starcie
+- `init_db()` tworzy tabele i konto `admin/admin` przy pierwszym starcie (z `must_change_password=True` — wymusza zmianę hasła)
+- Migracja online: `init_db()` dodaje kolumnę `must_change_password` do istniejących baz (ALTER TABLE z obsługą błędu jeśli już istnieje)
 
-### Frontend — `templates/index.html`
+### Frontend — `templates/index.html` + `static/app.js`
 
-SPA (vanilla JS). Bazuje na `sklepik_pro.html` z następującymi zmianami:
+SPA (vanilla JS). HTML/CSS w `static/app.js`, cały JavaScript w `static/app.js`. Bazuje na `sklepik_pro.html` z następującymi zmianami:
 - `localStorage` zastąpiony przez `fetch()` do REST API
 - Koszyk i numpad zostają **client-side** (nie wymagają synchronizacji)
 - Skanowanie kodów kreskowych — client-side (kamera, BarcodeDetector + ZXing)
@@ -66,12 +68,14 @@ Wszystkie zewnętrzne zależności są **self-hosted** (brak CDN) — warunek ko
 
 ```
 static/
+├── app.js                 # Cały JavaScript SPA (wyekstrahowany z index.html)
 ├── manifest.json          # Manifest PWA
 ├── sw.js                  # Service worker (serwowany przez /sw.js w app.py)
 ├── fonts/
-│   ├── FredokaOne-Regular.woff2
-│   ├── Nunito-latin.woff2       # subset latin (zawiera ó)
-│   └── Nunito-latin-ext.woff2  # subset latin-ext (ą, ę, ś, ł, ź, ż, ć, ń)
+│   ├── Fredoka-latin.woff2       # font nagłówków, subset latin
+│   ├── Fredoka-latin-ext.woff2   # font nagłówków, subset latin-ext (ą, ę, ś, ł...)
+│   ├── Nunito-latin.woff2        # subset latin (zawiera ó)
+│   └── Nunito-latin-ext.woff2   # subset latin-ext (ą, ę, ś, ł, ź, ż, ć, ń)
 ├── zxing/
 │   └── zxing.min.js       # @zxing/library 0.19.1 UMD (jsDelivr)
 └── icons/
@@ -91,9 +95,9 @@ Aplikacja spełnia kryteria PWA — Chrome na Androidzie proponuje "Dodaj do ekr
 3. Gotowe — aplikacja działa w pełni offline od tej chwili
 
 **Service worker (`static/sw.js`):**
-- Strategia Cache-First dla UI shell: `/app`, `/login`, fonty, ZXing
+- Strategia Cache-First dla UI shell: `/app`, `/login`, `static/app.js`, fonty, ZXing
 - Network-Only dla `/api/*` — IndexedDB obsługuje offline dla danych (patrz niżej)
-- `CACHE_NAME = 'sklepik-v1'` — zmień przy każdym deploymencie żeby wymusić aktualizację
+- `CACHE_NAME = 'sklepik-v12'` — zmień przy każdym deploymencie żeby wymusić aktualizację
 - `Service-Worker-Allowed: /` header w route `/sw.js` — umożliwia scope na całą aplikację mimo serwowania z `/static/`
 
 **Aktualizacja po deploymencie:** zmień `CACHE_NAME` w `static/sw.js` (`v1` → `v2` itd.). Chrome wykryje zmianę przy następnym otwarciu, zainstaluje nową wersję w tle i pokaże toast użytkownikowi.
@@ -121,7 +125,7 @@ Aplikacja obsługuje przerwy w połączeniu internetowym na dwóch poziomach:
 - `setOnlineState(bool)` — jedyne miejsce zmiany stanu; aktualizuje badge w nagłówku, baner na stronie Sprzedaży, styl przycisku Zatwierdź
 - Gdy offline: sprzedaż trafia do `pending_sales` w IndexedDB, stany produktów dekrementowane lokalnie
 - Auto-sync: sondowanie co 15s gdy offline + `window.online` event → `syncPendingSales()`
-- `syncPendingSales()` — iteruje kolejkę, POST do `/api/sales`, przy błędzie serwera (brak stanu) zachowuje w kolejce z `alert()` dla kasjera
+- `syncPendingSales()` — iteruje kolejkę, POST do `/api/sales`, przy utracie połączenia przerywa (reszta czeka), błędy serwera zbiera w tablicy `failed` i wyświetla zbiorczy alert z detalami na końcu
 
 **Ważne dla offline:**
 - Stany produktów w IndexedDB są dekrementowane lokalnie po każdej sprzedaży offline — kolejne sprzedaże w tej samej sesji offline widzą aktualny stan
@@ -152,6 +156,7 @@ Wszystkie (poza `/api/ping`) wymagają aktywnej sesji (401 → redirect do login
 | POST | `/api/users` | Dodaj użytkownika `[admin]` |
 | DELETE | `/api/users/<id>` | Usuń użytkownika `[admin]` |
 | PUT | `/api/users/<id>/password` | Zmień hasło (admin lub własne) |
+| GET | `/api/audit` | Ostatnie 200 wpisów audit logu `[admin]` |
 
 ## Kluczowe zasady implementacyjne
 
@@ -159,7 +164,7 @@ Wszystkie (poza `/api/ping`) wymagają aktywnej sesji (401 → redirect do login
 
 **Timestamp:** serwer nadaje czas sprzedaży (`datetime.now(timezone.utc)`), nie klient. Ważne przy wielu tabletach. Sprzedaże offline mają `ts_local` (czas lokalny) w IndexedDB, ale serwer nada własny `ts` przy synchronizacji.
 
-**Zdjęcia:** resize do max 300px JPEG 85% odbywa się **po stronie JS** (`handleImg()` w index.html) przed wysłaniem do API. Wynik to ~20-40 KB base64 na produkt. Serwer przechowuje base64 w kolumnie `img TEXT`. Obrazy są też w cache IndexedDB — UI działa offline z obrazami.
+**Zdjęcia:** resize do max 300px JPEG 85% odbywa się **po stronie JS** (`handleImg()` w `static/app.js`) przed wysłaniem do API. Wynik to ~20-40 KB base64 na produkt. Serwer przechowuje base64 w kolumnie `img TEXT`. Obrazy są też w cache IndexedDB — UI działa offline z obrazami.
 
 **Atomiczna sprzedaż:** `POST /api/sales` używa `with_for_update()` na wierszach produktów — dwa tablety nie mogą jednocześnie sprzedać tego samego towaru ponad stan.
 
@@ -169,12 +174,16 @@ Wszystkie (poza `/api/ping`) wymagają aktywnej sesji (401 → redirect do login
 - `is_admin=True` → dostęp do wszystkich zakładek i endpointów
 - `is_admin=False` (sprzedawca) → tylko Sprzedaż i Raport; zakładki Magazyn/Backup/Konta ukryte
 
-**Format backupu:** kompatybilny z oryginalną wersją statyczną (`sklepik_pro.html`). Można importować dane z localStorage przez eksport z oryginalnej apki.
+**Format backupu:** kompatybilny z oryginalną wersją statyczną (`sklepik_pro.html`). Można importować dane z localStorage przez eksport z oryginalnej apki. Import sprzedaży wymaga jawnej flagi `_import_sales=true` — domyślnie historia transakcji jest zachowywana.
 
-## Funkcje JS w templates/index.html
+**Audit log:** krytyczne akcje (logowanie, dodanie/edycja/usunięcie produktu, dodanie/usunięcie użytkownika, zmiana hasła, import) zapisywane do modelu `AuditLog`. Dostępne przez `GET /api/audit` (admin).
+
+**Wymuszona zmiana hasła:** konto `admin/admin` i nowe konta tworzone przez admina mają `must_change_password=True`. Frontend (`init()`) wykrywa tę flagę i otwiera modal `openPasswordModal(forced=true)` — nie można go zamknąć bez zmiany hasła.
+
+## Funkcje JS w static/app.js
 
 ### Główne funkcje aplikacji
-- `init()` — sprawdza łączność i sesję (`GET /api/me` z fallbackiem na IDB), ładuje produkty, inicjalizuje UI, uruchamia startup sync
+- `init()` — sprawdza łączność i sesję (`GET /api/me` z fallbackiem na IDB), ładuje produkty, inicjalizuje UI, uruchamia startup sync; wykrywa `must_change_password`
 - `api(method, path, body)` — wrapper na fetch; AbortController 8s; `err.isOffline=true` przy braku sieci; auto-recovery `setOnlineState(true)` przy udanej odpowiedzi
 - `loadProducts()` — online: fetch z API + zapis do IDB; offline: czyta z IDB
 - `finalize()` — online: POST `/api/sales`; offline: `saveOfflineSale()`
@@ -184,9 +193,34 @@ Wszystkie (poza `/api/ping`) wymagają aktywnej sesji (401 → redirect do login
 - `restock(id)` — POST do `/api/products/<id>/restock`
 - `delProduct(id)` — DELETE do API
 - `renderReport()` — pobiera `GET /api/sales?date=...` i renderuje tabelę; toast przy offline
-- `doImport()` — wysyła plik jako JSON do `POST /api/import`
+- `doPrint()` — renderuje raport i wywołuje `window.print()`
+- `doImport()` — wysyła JSON do `POST /api/import` z opcjonalną flagą `_import_sales`
+- `previewImport(input)` — parsuje plik JSON i pokazuje podgląd (liczba produktów/transakcji) przed importem
 - `handleImg(input)` — resize zdjęcia client-side do max 300px przed wysłaniem
 - `decodeBarcode(file)` — BarcodeDetector API lub ZXing fallback
+
+### Nawigacja i rendering
+- `goPage(name, btn)` — przełącza zakładki; wywołuje odpowiedni render (renderStock, renderReport, renderUsers, renderProducts)
+- `renderProducts()` — filtruje po kategorii i wyszukiwaniu, sortuje produkty z koszyka na górę
+- `renderStock()` — widok magazynu ze stanami i przyciskami akcji
+- `renderCategories()` / `getCategories()` / `setCategory(cat)` — dynamiczne filtry kategorii
+- `renderUsers()` / `openUserModal()` / `closeUserModal()` / `saveUser()` / `deleteUser()` — zarządzanie kontami
+- `renderCart()` — koszyk z przyciskami qty; renderuje też produkty po każdej zmianie
+- `renderQuickAmounts()` — generuje przyciski szybkich kwot (1 zł – 200 zł)
+
+### Koszyk i numpad
+- `addToCart(id)` / `changeQty(id, d)` / `cartTotal()` / `clearCart()`
+- `npDigit(d)` / `npDelete()` / `npClear()` / `npSet(g)` / `npExact()` / `updateNumDisplay()`
+
+### Modals produktu i hasła
+- `openAddModal()` / `openEditModal(id)` / `closeModal()` / `removeImg()`
+- `openPasswordModal(forced)` / `closePasswordModal()` / `changeMyPassword()`
+
+### Skaner
+- `initHwScanner()` — listener `keydown` dla czytnika HW (bufor z timeoutem 60ms, min. 4 znaki + Enter)
+- `openScanner(mode)` — otwiera input file do skanowania kamerą
+- `processScanImage(input)` / `decodeBarcode(file)` / `handleScannedCode(code)` / `closeScanner()`
+- `loadImage(file)` — helper Promise dla Image load
 
 ### Funkcje offline/connectivity
 - `offlineDB` — IIFE namespace; metody: `saveProducts`, `getProducts`, `updateProductStock`, `addPendingSale`, `getPendingSales`, `removePendingSale`, `countPendingSales`, `saveCurrentUser`, `getCachedUser`
@@ -195,12 +229,18 @@ Wszystkie (poza `/api/ping`) wymagają aktywnej sesji (401 → redirect do login
 - `updateConnectionBadge()` — aktualizuje wskaźnik w nagłówku (online/offline/syncing + chip z liczbą oczekujących)
 - `startProbeLoop()` / `stopProbeLoop()` — sondowanie co 15s gdy offline
 
+### Helpers
+- `h(str)` — escapowanie HTML (XSS protection); używaj wszędzie przy renderowaniu danych z API
+- `fPLN(grosz)` / `fTime(ts)` / `today()` — formatowanie
+- `loading(on)` — pokazuje/ukrywa pasek ładowania
+- `showToast(msg, type)` — toast z auto-hide po 2,5s
+
 ## Zasada obowiązkowa przy każdej zmianie frontendu
 
-**Po każdej zmianie kodu** (`templates/index.html`, `static/sw.js`, CSS, JS, fonty, ikony) zawsze wykonaj dwa kroki:
+**Po każdej zmianie kodu** (`templates/index.html`, `static/app.js`, `static/sw.js`, CSS, fonty, ikony) zawsze wykonaj dwa kroki:
 
-1. Podbij `CACHE_NAME` w `static/sw.js` (np. `'sklepik-v8'` → `'sklepik-v9'`) — wymusza pobranie nowej wersji przez Chrome
-2. Podbij wersję aplikacji w `templates/index.html` w elemencie `<div class="app-version">` (semver: patch dla bugfixów, minor dla nowych funkcji)
+1. Podbij `CACHE_NAME` w `static/sw.js` (np. `'sklepik-v12'` → `'sklepik-v13'`) — wymusza pobranie nowej wersji przez Chrome
+2. Podbij wersję aplikacji w `static/app.js` w elemencie `<div class="app-version">` (semver: patch dla bugfixów, minor dla nowych funkcji)
 
 Bez tego użytkownicy będą widzieć starą wersję z cache service workera.
 
@@ -214,15 +254,15 @@ Bez tego użytkownicy będą widzieć starą wersję z cache service workera.
 
 **Zmień schemat kolorów:** CSS custom properties w `:root` na początku `templates/index.html`.
 
-**Zmień szybkie kwoty płatności:** tablica `amts` w funkcji `renderQuickAmounts()` w `templates/index.html`.
+**Zmień szybkie kwoty płatności:** tablica `amts` w funkcji `renderQuickAmounts()` w `static/app.js`.
 
-**Dodaj obsługiwane formaty kodów kreskowych:** tablica `formats` w `decodeBarcode()` w `templates/index.html`.
+**Dodaj obsługiwane formaty kodów kreskowych:** tablica `formats` w `decodeBarcode()` w `static/app.js`.
 
-**Zmień limit rozmiaru zdjęcia:** stała `max` w `handleImg()` w `templates/index.html` (domyślnie 300px).
+**Zmień limit rozmiaru zdjęcia:** stała `max` w `handleImg()` w `static/app.js` (domyślnie 300px).
 
 **Dodaj nowy endpoint API:** wzorzec w `app.py` — dodaj route z dekoratorem `@login_required` i opcjonalnie `@admin_required`.
 
-**Zmień interwał sondowania offline:** stała `15000` w `startProbeLoop()` w `templates/index.html` (domyślnie 15s).
+**Zmień interwał sondowania offline:** stała `15000` w `startProbeLoop()` w `static/app.js` (domyślnie 15s).
 
 **Rozszerz tryb offline na inną zakładkę:** wzorzec — sprawdź `isOnline` przed wywołaniem API, przy `e.isOffline` pokaż stosowny komunikat lub zastosuj fallback z IDB.
 
