@@ -141,6 +141,7 @@ const offlineDB = (() => {
       const store = tx('user', 'readwrite');
       const clear = store.clear();
       clear.onsuccess = () => {
+        if (!userData) { resolve(); return; }
         const r = store.put(userData);
         r.onsuccess = () => resolve();
         r.onerror   = e => reject(e.target.error);
@@ -1101,6 +1102,13 @@ function doPrint() {
     window.print();
     tbody.innerHTML = saved;
   });
+}
+
+// ================== WYLOGOWANIE ==================
+async function doLogout() {
+  // Wyczyść cached user z IDB przed wylogowaniem — zapobiega załadowaniu apki ze starą sesją po nowym logowaniu
+  await offlineDB.saveCurrentUser(null).catch(() => {});
+  window.location.href = '/logout';
 }
 
 // ================== ZMIANA HASŁA ==================

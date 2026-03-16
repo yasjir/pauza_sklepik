@@ -4,6 +4,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [2.5.1] — 2026-03-16
+
+### Fixed
+- **Critical ERR_FAILED after logout** — the service worker was pre-caching `/login` at install time while the user was already authenticated. The server responded with a 302 → `/app` redirect, so the app shell HTML was stored under the `/login` cache key instead of the login form. After logout the browser fell into an infinite redirect loop → ERR_FAILED, making the app permanently inaccessible.
+  - Removed `/login` from `PRECACHE_URLS`
+  - Added `/login` to the SW bypass list (alongside `/logout`) — the login page always goes to the network
+  - Fixed a bug in the `.catch()` fallback (`Promise || Promise` short-circuit instead of proper awaiting)
+  - Logout now calls `doLogout()` which clears the cached user from IndexedDB before navigating to `/logout`, preventing the app from loading with a stale session
+
+---
+
 ## [2.5.0] — 2026-03-16
 
 ### Added

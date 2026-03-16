@@ -4,12 +4,13 @@
 //
 // Aby wymusić aktualizację po deploymencie: zmień CACHE_NAME (np. sklepik-v2)
 
-const CACHE_NAME = 'sklepik-v15';
+const CACHE_NAME = 'sklepik-v17';
 
 // Zasoby pre-cachowane przy instalacji SW (cały UI shell)
+// UWAGA: '/login' celowo pominięte — serwer może przekierować na '/app' jeśli użytkownik jest zalogowany,
+// co spowodowałoby zcachowanie złej strony pod kluczem '/login' → ERR_FAILED po wylogowaniu.
 const PRECACHE_URLS = [
   '/app',
-  '/login',
   '/static/app.js',
   '/static/zxing/zxing.min.js',
   '/static/fonts/Fredoka-latin.woff2',
@@ -42,8 +43,9 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
-  // /api/* i /logout — nie przechwytuj; obsługa natywna przez przeglądarkę
-  if (url.pathname.startsWith('/api/') || url.pathname === '/logout') return;
+  // /api/*, /logout, /login — nie przechwytuj; obsługa natywna przez przeglądarkę
+  // /login musi zawsze trafiać do sieci — serwer obsługuje logikę auth (redirect jeśli zalogowany)
+  if (url.pathname.startsWith('/api/') || url.pathname === '/logout' || url.pathname === '/login') return;
 
   // Tylko GET
   if (event.request.method !== 'GET') return;
@@ -61,8 +63,8 @@ self.addEventListener('fetch', event => {
         }
         return response;
       }).catch(() => {
-        // Brak sieci i brak cache — fallback na stronę logowania
-        return caches.match('/login') || caches.match('/app');
+        // Brak sieci i brak cache — fallback na stronę apki (login nie jest cachowany)
+        return caches.match('/app');
       });
     })
   );
