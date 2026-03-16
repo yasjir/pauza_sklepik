@@ -19,6 +19,7 @@ let hwScanBuf = '';         // bufor klawiszy z czytnika HW
 let hwScanTs  = 0;          // timestamp ostatniego znaku (ms)
 let npValue = '';
 let activeCategory = 'Wszystkie';
+let activeStockCategory = 'Wszystkie';
 let currentUser          = null;
 let currentUserFromCache = false;   // true gdy załadowany z IndexedDB offline
 let importData           = null;
@@ -703,13 +704,40 @@ async function syncPendingSales() {
 }
 
 // ================== MAGAZYN ==================
+function renderStockCategories() {
+  const el = document.getElementById('stockCatFilter');
+  if (!el) return;
+  el.innerHTML = '';
+  getCategories().forEach(c => {
+    const btn = document.createElement('button');
+    btn.className = 'cat-chip' + (c === activeStockCategory ? ' active' : '');
+    btn.textContent = c;
+    btn.addEventListener('click', () => { activeStockCategory = c; renderStock(); });
+    el.appendChild(btn);
+  });
+}
+
 function renderStock() {
+  renderStockCategories();
   const grid = document.getElementById('stockGrid');
   if (products.length === 0) {
     grid.innerHTML = '<div class="no-data">Brak produktów. Kliknij „Dodaj produkt".</div>';
     return;
   }
-  grid.innerHTML = products.map(p => {
+
+  const search = (document.getElementById('stockSearchInput')?.value || '').toLowerCase();
+  const list = products.filter(p => {
+    const matchSearch = !search || p.name.toLowerCase().includes(search) || (p.barcode && p.barcode.includes(search));
+    const matchCat = activeStockCategory === 'Wszystkie' || (p.category || 'Inne') === activeStockCategory;
+    return matchSearch && matchCat;
+  });
+
+  if (list.length === 0) {
+    grid.innerHTML = '<div class="no-data">Brak produktów.</div>';
+    return;
+  }
+
+  function buildStockCard(p) {
     const badge = p.stock === 0
       ? '<span class="badge badge-empty">Brak</span>'
       : p.stock <= 3 ? '<span class="badge badge-low">Mało</span>'
@@ -739,7 +767,24 @@ function renderStock() {
         <button class="sm-btn sm-red" onclick="delProduct(${p.id})">🗑️</button>
       </div>
     </div>`;
-  }).join('');
+  }
+
+  // Grupuj wg kategorii, sortuj alfabetycznie w grupie
+  const groupMap = {};
+  list.forEach(p => {
+    const cat = p.category || 'Inne';
+    if (!groupMap[cat]) groupMap[cat] = [];
+    groupMap[cat].push(p);
+  });
+  Object.values(groupMap).forEach(g => g.sort((a, b) => a.name.localeCompare(b.name, 'pl')));
+  const sortedCats = Object.keys(groupMap).sort((a, b) => a.localeCompare(b, 'pl'));
+
+  grid.innerHTML = sortedCats.map(cat => `
+    <div class="prod-group">
+      <div class="prod-group-label">${h(cat)}</div>
+      <div class="stock-grid">${groupMap[cat].map(buildStockCard).join('')}</div>
+    </div>
+  `).join('');
 }
 
 async function restock(id) {

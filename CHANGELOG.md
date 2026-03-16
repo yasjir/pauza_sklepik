@@ -4,6 +4,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [2.5.0] — 2026-03-16
+
+### Added
+- **Stock view — search and category filter** — the Magazyn tab now has a text search input (filters by name or barcode) and category chip buttons, matching the behaviour of the Sprzedaż tab.
+- **Stock view — grouped by category** — products in Magazyn are now grouped under category headers (same layout as the seller view: rows of groups, each group a grid of cards sorted alphabetically).
+
+---
+
 ## [2.4.0] — 2026-03-16
 
 ### Added

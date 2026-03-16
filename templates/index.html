@@ -618,7 +618,11 @@ nav {
       <button class="add-btn" onclick="openAddModal()">＋ Dodaj produkt</button>
     </div>
   </div>
-  <div class="stock-grid" id="stockGrid"></div>
+  <div class="search-bar">
+    <input type="text" id="stockSearchInput" placeholder="🔍 Szukaj produktu..." oninput="renderStock()">
+  </div>
+  <div class="cat-filter" id="stockCatFilter"></div>
+  <div class="products-grid" id="stockGrid"></div>
 </div>
 
 <!-- ============ PAGE: RAPORT ============ -->
