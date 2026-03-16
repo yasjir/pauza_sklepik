@@ -1303,16 +1303,83 @@ function handleScannedCode(code) {
     else {
       openAddModal();
       document.getElementById('fBarcode').value = code;
-      showToast('Nowy produkt — uzupełnij dane', 'orange');
+      showToast('Nowy produkt — uzupełniam dane...', 'orange');
+      lookupBarcode(code);
     }
   } else if (scannerMode === 'modal') {
     document.getElementById('fBarcode').value = code;
     showToast('✅ Kod wpisany: ' + code, 'green');
+    lookupBarcode(code);
   }
 }
 
 function closeScanner() {
   document.getElementById('scannerOverlay').classList.add('hidden');
+}
+
+// ================== LOOKUP KODU KRESKOWEGO (Open Food Facts) ==================
+async function lookupBarcode(code) {
+  const statusEl = document.getElementById('barcodeLookupStatus');
+  if (!statusEl) return;
+  statusEl.style.display = 'block';
+  statusEl.textContent = '🔍 Szukam w bazie produktów...';
+  try {
+    const r = await fetch(
+      `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}?fields=product_name,product_name_pl,image_front_url,categories_tags`,
+      { signal: AbortSignal.timeout(8000) }
+    );
+    const data = await r.json();
+    if (data.status !== 1 || !data.product) {
+      statusEl.textContent = 'ℹ️ Nie znaleziono w bazie — uzupełnij ręcznie';
+      return;
+    }
+    const p = data.product;
+    const name = p.product_name_pl || p.product_name || '';
+    const nameEl = document.getElementById('fName');
+    if (name && nameEl && !nameEl.value.trim()) {
+      nameEl.value = name;
+    }
+    // Kategoria — wybierz polski tag jeśli dostępny
+    const catEl = document.getElementById('fCategory');
+    if (catEl && !catEl.value.trim() && Array.isArray(p.categories_tags)) {
+      const plTag = p.categories_tags.find(t => t.startsWith('pl:'));
+      if (plTag) {
+        catEl.value = plTag.replace('pl:', '').replace(/-/g, ' ');
+        catEl.value = catEl.value.charAt(0).toUpperCase() + catEl.value.slice(1);
+      }
+    }
+    // Zdjęcie — pobierz, zmniejsz do 300px i ustaw jako pendingImgData
+    if (p.image_front_url && !pendingImgData) {
+      try {
+        const imgResp = await fetch(p.image_front_url);
+        const blob = await imgResp.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        await new Promise((res, rej) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const max = 300;
+            let w = img.width, h = img.height;
+            if (w > h) { if (w > max) { h = h * max / w; w = max; } }
+            else        { if (h > max) { w = w * max / h; h = max; } }
+            canvas.width = w; canvas.height = h;
+            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+            pendingImgData = canvas.toDataURL('image/jpeg', 0.85);
+            document.getElementById('imgPreview').src = pendingImgData;
+            document.getElementById('imgPreviewBox').style.display = 'block';
+            URL.revokeObjectURL(blobUrl);
+            res();
+          };
+          img.onerror = rej;
+          img.src = blobUrl;
+        });
+      } catch (_) { /* brak zdjęcia — nic się nie dzieje */ }
+    }
+    statusEl.textContent = '✅ Dane uzupełnione z Open Food Facts';
+    statusEl.style.color = 'var(--success, #2e7d32)';
+  } catch (e) {
+    statusEl.textContent = 'ℹ️ Nie znaleziono w bazie — uzupełnij ręcznie';
+  }
 }
 
 // ================== TOAST ==================

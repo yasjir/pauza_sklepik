@@ -4,6 +4,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [2.6.0] — 2026-03-16
+
+### Added
+- **Barcode auto-fill from Open Food Facts** — when an unknown barcode is scanned in the Stock tab (or via the "📷 Skanuj" button inside the product form), the app queries the free [Open Food Facts](https://world.openfoodfacts.org) database and automatically populates the product name, category, and cover image. Fields are only filled if they are currently empty, so any data already typed by the admin is preserved. A status line below the barcode field shows lookup progress (`🔍 Szukam…`, `✅ Dane uzupełnione`, or `ℹ️ Nie znaleziono`). No API key required; works directly from the browser (CORS enabled). The fetched image is resized client-side to max 300 px JPEG 85% — identical to the manual photo workflow.
+
+---
+
 ## [2.5.1] — 2026-03-16
 
 ### Fixed
