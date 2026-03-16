@@ -4,7 +4,7 @@
 //
 // Aby wymusić aktualizację po deploymencie: zmień CACHE_NAME (np. sklepik-v2)
 
-const CACHE_NAME = 'sklepik-v13';
+const CACHE_NAME = 'sklepik-v14';
 
 // Zasoby pre-cachowane przy instalacji SW (cały UI shell)
 const PRECACHE_URLS = [

@@ -356,6 +356,12 @@ nav {
 .report-table td { padding: 11px 16px; border-bottom: 1px solid var(--border); font-size: 0.88rem; }
 .report-table tr:last-child td { border-bottom: none; }
 .report-table tr:hover td { background: #FFF8F4; }
+.report-controls label { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; }
+.pagination { display: flex; gap: 6px; justify-content: center; margin: 14px 0 4px; flex-wrap: wrap; }
+.pagination button { min-width: 36px; padding: 5px 11px; border: 2px solid var(--border); border-radius: 10px; background: white; font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 0.88rem; cursor: pointer; transition: all 0.15s; }
+.pagination button:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+.pagination button.active { background: var(--primary); color: white; border-color: var(--primary); }
+.pagination button:disabled { opacity: 0.4; cursor: default; }
 
 /* ============ UŻYTKOWNICY ============ */
 .users-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
@@ -440,7 +446,7 @@ nav {
 
 /* PRINT */
 @media print {
-  header, nav, .report-top button, .report-controls, .date-input { display: none !important; }
+  header, nav, .report-top button, .report-controls, .date-input, .pagination { display: none !important; }
   body { background: white; }
   .page { padding: 0; }
   .print-header { display: block !important; }
@@ -618,18 +624,19 @@ nav {
 <!-- ============ PAGE: RAPORT ============ -->
 <div class="page" id="page-report">
   <div class="print-header">
-    <h2>🛒 Sklepik Szkolny — Raport Dzienny</h2>
+    <h2>🛒 Sklepik Szkolny — Raport Sprzedaży</h2>
     <p id="printDateStr"></p>
   </div>
   <div class="report-top">
-    <h2>📊 Raport Dzienny</h2>
+    <h2>📊 Raport Sprzedaży</h2>
     <div class="report-controls">
-      <input type="date" class="date-input" id="reportDate" oninput="renderReport()">
+      <label>Od <input type="date" class="date-input" id="reportDateFrom" oninput="renderReport()"></label>
+      <label>Do <input type="date" class="date-input" id="reportDateTo" oninput="renderReport()"></label>
       <button class="btn-print" onclick="doPrint()">🖨️ Drukuj</button>
     </div>
   </div>
   <div class="stats-row">
-    <div class="stat-box s-green"><div class="stat-val" id="rRevenue">0,00 zł</div><div class="stat-lbl">Utarg dzienny</div></div>
+    <div class="stat-box s-green"><div class="stat-val" id="rRevenue">0,00 zł</div><div class="stat-lbl">Utarg</div></div>
     <div class="stat-box s-blue"><div class="stat-val" id="rTrans">0</div><div class="stat-lbl">Transakcji</div></div>
     <div class="stat-box s-orange"><div class="stat-val" id="rItems">0</div><div class="stat-lbl">Sprzedanych szt.</div></div>
   </div>
@@ -637,6 +644,7 @@ nav {
     <thead><tr><th>Godzina</th><th>Produkty</th><th>Zapłacono</th><th>Reszta</th><th>Kwota</th></tr></thead>
     <tbody id="reportBody"></tbody>
   </table>
+  <div class="pagination" id="reportPagination"></div>
 </div>
 
 <!-- ============ PAGE: BACKUP ============ -->
@@ -809,6 +817,6 @@ nav {
 <div class="toast" id="toast"></div>
 
 <script src="/static/app.js"></script>
-<div class="app-version">2.3.0</div>
+<div class="app-version">2.4.0</div>
 </body>
 </html>

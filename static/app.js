@@ -317,7 +317,8 @@ async function init() {
   document.getElementById('headerDate').innerHTML =
     now.toLocaleDateString('pl-PL', {weekday:'long'}) + '<br>' +
     now.toLocaleDateString('pl-PL', {day:'numeric', month:'long'});
-  document.getElementById('reportDate').value = today();
+  document.getElementById('reportDateFrom').value = today();
+  document.getElementById('reportDateTo').value   = today();
 
   await loadProducts();
   renderCategories();
@@ -940,48 +941,122 @@ async function deleteUser(id, username) {
 }
 
 // ================== RAPORT ==================
+const REPORT_PAGE_SIZE = 20;
+let reportPage     = 1;
+let reportAllSales = [];
+
 async function renderReport() {
-  const date = document.getElementById('reportDate').value;
+  const dateFrom = document.getElementById('reportDateFrom').value;
+  const dateTo   = document.getElementById('reportDateTo').value;
+  let params = '';
+  if (dateFrom && dateTo && dateFrom === dateTo) {
+    params = `date=${dateFrom}`;
+  } else {
+    if (dateFrom) params += `date_from=${dateFrom}`;
+    if (dateTo)   params += (params ? '&' : '') + `date_to=${dateTo}`;
+  }
   let data;
   try {
-    data = await api('GET', `/api/sales?date=${date}`);
+    data = await api('GET', `/api/sales${params ? '?' + params : ''}`);
   } catch (e) {
     if (e.isOffline) { showToast('📴 Raport niedostępny offline', 'red'); return; }
     showToast('❌ ' + e.message, 'red'); return;
   }
   if (!data) return;
 
-  const daySales  = data;
-  const revenue   = daySales.reduce((s, x) => s + x.total, 0);
-  const itemCount = daySales.reduce((s, x) => s + x.items.reduce((a, i) => a + i.qty, 0), 0);
+  reportAllSales = data;
+  reportPage     = 1;
 
+  const revenue   = reportAllSales.reduce((s, x) => s + x.total, 0);
+  const itemCount = reportAllSales.reduce((s, x) => s + x.items.reduce((a, i) => a + i.qty, 0), 0);
   document.getElementById('rRevenue').textContent = fPLN(revenue);
-  document.getElementById('rTrans').textContent   = daySales.length;
+  document.getElementById('rTrans').textContent   = reportAllSales.length;
   document.getElementById('rItems').textContent   = itemCount;
 
-  const tbody = document.getElementById('reportBody');
-  if (daySales.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="no-data">Brak sprzedaży w tym dniu</td></tr>';
-    return;
+  // Nagłówek wydruku
+  if (dateFrom && dateTo && dateFrom === dateTo) {
+    const d = new Date(dateFrom + 'T12:00:00');
+    document.getElementById('printDateStr').textContent =
+      d.toLocaleDateString('pl-PL', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+  } else {
+    const fmt = d => new Date(d + 'T12:00:00').toLocaleDateString('pl-PL', {day:'numeric', month:'long', year:'numeric'});
+    const parts = [];
+    if (dateFrom) parts.push(fmt(dateFrom));
+    if (dateTo)   parts.push(fmt(dateTo));
+    document.getElementById('printDateStr').textContent = parts.join(' – ');
   }
-  tbody.innerHTML = daySales.map(s => {
-    const itemsStr = s.items.map(i => `${h(i.emoji || '')} ${h(i.name)} ×${i.qty}`).join(', ');
-    const change   = (s.paid || s.total) - s.total;
-    return `<tr>
-      <td style="white-space:nowrap">${fTime(s.ts)}</td>
-      <td>${itemsStr}</td>
-      <td>${fPLN(s.paid || s.total)}</td>
-      <td>${change > 0 ? fPLN(change) : '—'}</td>
-      <td><strong>${fPLN(s.total)}</strong></td>
-    </tr>`;
-  }).join('');
 
-  const d = new Date(date + 'T12:00:00');
-  document.getElementById('printDateStr').textContent =
-    d.toLocaleDateString('pl-PL', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+  renderReportPage();
 }
 
-function doPrint() { renderReport().then(() => window.print()); }
+function _reportRowHtml(s) {
+  const itemsStr = s.items.map(i => `${h(i.emoji || '')} ${h(i.name)} ×${i.qty}`).join(', ');
+  const change   = (s.paid || s.total) - s.total;
+  return `<tr>
+    <td style="white-space:nowrap">${fTime(s.ts)}</td>
+    <td>${itemsStr}</td>
+    <td>${fPLN(s.paid || s.total)}</td>
+    <td>${change > 0 ? fPLN(change) : '—'}</td>
+    <td><strong>${fPLN(s.total)}</strong></td>
+  </tr>`;
+}
+
+function renderReportPage() {
+  const tbody = document.getElementById('reportBody');
+  if (reportAllSales.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="no-data">Brak sprzedaży w wybranym okresie</td></tr>';
+    document.getElementById('reportPagination').innerHTML = '';
+    return;
+  }
+  const start = (reportPage - 1) * REPORT_PAGE_SIZE;
+  const slice = reportAllSales.slice(start, start + REPORT_PAGE_SIZE);
+  tbody.innerHTML = slice.map(_reportRowHtml).join('');
+  renderReportPagination();
+}
+
+function renderReportPagination() {
+  const totalPages = Math.ceil(reportAllSales.length / REPORT_PAGE_SIZE);
+  const el = document.getElementById('reportPagination');
+  if (totalPages <= 1) { el.innerHTML = ''; return; }
+
+  const range = [];
+  const delta = 2;
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === 1 || i === totalPages || (i >= reportPage - delta && i <= reportPage + delta)) {
+      range.push(i);
+    } else if (range[range.length - 1] !== '…') {
+      range.push('…');
+    }
+  }
+
+  el.innerHTML = [
+    `<button onclick="goReportPage(${reportPage - 1})" ${reportPage === 1 ? 'disabled' : ''}>&#8249;</button>`,
+    ...range.map(r => r === '…'
+      ? `<button disabled>…</button>`
+      : `<button class="${r === reportPage ? 'active' : ''}" onclick="goReportPage(${r})">${r}</button>`
+    ),
+    `<button onclick="goReportPage(${reportPage + 1})" ${reportPage === totalPages ? 'disabled' : ''}>&#8250;</button>`,
+  ].join('');
+}
+
+function goReportPage(n) {
+  const totalPages = Math.ceil(reportAllSales.length / REPORT_PAGE_SIZE);
+  if (n < 1 || n > totalPages) return;
+  reportPage = n;
+  renderReportPage();
+  document.getElementById('reportTable').scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+
+function doPrint() {
+  renderReport().then(() => {
+    // Przed drukowaniem: pokaż wszystkie wiersze
+    const tbody = document.getElementById('reportBody');
+    const saved = tbody.innerHTML;
+    tbody.innerHTML = reportAllSales.map(_reportRowHtml).join('');
+    window.print();
+    tbody.innerHTML = saved;
+  });
+}
 
 // ================== ZMIANA HASŁA ==================
 function openPasswordModal(forced = false) {

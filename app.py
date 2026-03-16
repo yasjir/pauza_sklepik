@@ -375,10 +375,17 @@ def restock_product(pid):
 @app.route('/api/sales', methods=['GET'])
 @login_required
 def get_sales():
-    date = request.args.get('date')
+    date      = request.args.get('date')
+    date_from = request.args.get('date_from')
+    date_to   = request.args.get('date_to')
     query = Sale.query
     if date:
         query = query.filter_by(date=date)
+    elif date_from or date_to:
+        if date_from:
+            query = query.filter(Sale.date >= date_from)
+        if date_to:
+            query = query.filter(Sale.date <= date_to)
     sales = query.order_by(Sale.ts.desc()).all()
     return jsonify([s.to_dict() for s in sales])
 
