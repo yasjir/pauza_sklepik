@@ -4,6 +4,27 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [2.3.0] — 2026-03-16
+
+### Changed
+- **Product grid grouped by category** — products are now grouped under category headers with a visual separator. Within each group products are sorted alphabetically. Products already in the cart are promoted to a separate "🛒 W koszyku" section at the top.
+
+---
+
+## [2.2.0] — 2026-03-16
+
+### Changed
+- **JavaScript extracted to `static/app.js`** — all JS moved out of `templates/index.html` into a separate file for better maintainability and explicit service worker caching.
+
+---
+
+## [2.1.0] — 2026-03-16
+
+### Added
+- **In-cart highlight** — products already added to the cart are visually highlighted in the product grid (green border + cart badge showing quantity).
+
+---
+
 ## [2.0.1] — 2026-03-15
 
 ### Fixed

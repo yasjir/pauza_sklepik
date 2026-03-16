@@ -405,11 +405,58 @@ function setCategory(cat) {
 }
 
 // ================== PRODUCTS GRID ==================
+function buildCard(p) {
+  const stockLabel = p.stock === 0 ? 'Brak' : p.stock <= 3 ? `Ostatnie ${p.stock}` : `${p.stock} szt.`;
+  const pillClass  = p.stock === 0 ? 'empty' : p.stock <= 3 ? 'low' : '';
+  const cartItem   = cart.find(c => c.id === p.id);
+
+  const card = document.createElement('div');
+  card.className = 'prod-card' + (p.stock === 0 ? ' unavailable' : '') + (cartItem ? ' in-cart' : '');
+  if (p.stock > 0) card.addEventListener('click', () => addToCart(p.id));
+
+  const pill = document.createElement('span');
+  pill.className = 'stock-pill' + (pillClass ? ' ' + pillClass : '');
+  pill.textContent = stockLabel;
+  card.appendChild(pill);
+
+  if (cartItem) {
+    const badge = document.createElement('span');
+    badge.className = 'cart-qty-badge';
+    badge.textContent = `🛒 ×${cartItem.qty}`;
+    card.appendChild(badge);
+  }
+
+  if (p.img) {
+    const img = document.createElement('img');
+    img.className = 'prod-img';
+    img.src = p.img;
+    img.alt = p.name;
+    card.appendChild(img);
+  } else {
+    const emoji = document.createElement('span');
+    emoji.className = 'prod-emoji';
+    emoji.textContent = p.emoji || '🛒';
+    card.appendChild(emoji);
+  }
+
+  const name = document.createElement('div');
+  name.className = 'prod-name';
+  name.textContent = p.name;
+  card.appendChild(name);
+
+  const price = document.createElement('div');
+  price.className = 'prod-price';
+  price.textContent = fPLN(p.price);
+  card.appendChild(price);
+
+  return card;
+}
+
 function renderProducts() {
   const search = document.getElementById('searchInput').value.toLowerCase();
   const grid = document.getElementById('productsGrid');
 
-  let list = products.filter(p => {
+  const list = products.filter(p => {
     const matchSearch = !search || p.name.toLowerCase().includes(search) || (p.barcode && p.barcode.includes(search));
     const matchCat = activeCategory === 'Wszystkie' || (p.category || 'Inne') === activeCategory;
     return matchSearch && matchCat;
@@ -420,61 +467,39 @@ function renderProducts() {
     return;
   }
 
-  // Produkty z koszyka na górę
-  list.sort((a, b) => {
-    const aInCart = cart.some(c => c.id === a.id) ? 0 : 1;
-    const bInCart = cart.some(c => c.id === b.id) ? 0 : 1;
-    return aInCart - bInCart;
+  const inCart    = list.filter(p =>  cart.some(c => c.id === p.id)).sort((a, b) => a.name.localeCompare(b.name, 'pl'));
+  const notInCart = list.filter(p => !cart.some(c => c.id === p.id));
+
+  // Grupuj wg kategorii, sortuj alfabetycznie w grupie
+  const groupMap = {};
+  notInCart.forEach(p => {
+    const cat = p.category || 'Inne';
+    if (!groupMap[cat]) groupMap[cat] = [];
+    groupMap[cat].push(p);
   });
+  Object.values(groupMap).forEach(g => g.sort((a, b) => a.name.localeCompare(b.name, 'pl')));
+  const sortedCats = Object.keys(groupMap).sort((a, b) => a.localeCompare(b, 'pl'));
+
+  function renderGroup(label, items, isCart = false) {
+    const group = document.createElement('div');
+    group.className = 'prod-group' + (isCart ? ' prod-group-cart' : '');
+
+    const header = document.createElement('div');
+    header.className = 'prod-group-label';
+    header.textContent = label;
+    group.appendChild(header);
+
+    const groupGrid = document.createElement('div');
+    groupGrid.className = 'prod-group-grid';
+    items.forEach(p => groupGrid.appendChild(buildCard(p)));
+    group.appendChild(groupGrid);
+
+    grid.appendChild(group);
+  }
 
   grid.innerHTML = '';
-  list.forEach(p => {
-    const stockLabel = p.stock === 0 ? 'Brak' : p.stock <= 3 ? `Ostatnie ${p.stock}` : `${p.stock} szt.`;
-    const pillClass  = p.stock === 0 ? 'empty' : p.stock <= 3 ? 'low' : '';
-
-    const cartItem = cart.find(c => c.id === p.id);
-
-    const card = document.createElement('div');
-    card.className = 'prod-card' + (p.stock === 0 ? ' unavailable' : '') + (cartItem ? ' in-cart' : '');
-    if (p.stock > 0) card.addEventListener('click', () => addToCart(p.id));
-
-    const pill = document.createElement('span');
-    pill.className = 'stock-pill' + (pillClass ? ' ' + pillClass : '');
-    pill.textContent = stockLabel;
-    card.appendChild(pill);
-
-    if (cartItem) {
-      const badge = document.createElement('span');
-      badge.className = 'cart-qty-badge';
-      badge.textContent = `🛒 ×${cartItem.qty}`;
-      card.appendChild(badge);
-    }
-
-    if (p.img) {
-      const img = document.createElement('img');
-      img.className = 'prod-img';
-      img.src = p.img;
-      img.alt = p.name;
-      card.appendChild(img);
-    } else {
-      const emoji = document.createElement('span');
-      emoji.className = 'prod-emoji';
-      emoji.textContent = p.emoji || '🛒';
-      card.appendChild(emoji);
-    }
-
-    const name = document.createElement('div');
-    name.className = 'prod-name';
-    name.textContent = p.name;
-    card.appendChild(name);
-
-    const price = document.createElement('div');
-    price.className = 'prod-price';
-    price.textContent = fPLN(p.price);
-    card.appendChild(price);
-
-    grid.appendChild(card);
-  });
+  if (inCart.length > 0) renderGroup('🛒 W koszyku', inCart, true);
+  sortedCats.forEach(cat => renderGroup(cat, groupMap[cat]));
 }
 
 // ================== CART ==================

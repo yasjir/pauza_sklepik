@@ -207,7 +207,18 @@ nav {
 }
 .scan-btn:hover { background: var(--primary-dark); }
 
-.products-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+.products-grid { display: flex; flex-direction: column; gap: 18px; }
+.prod-group-label {
+  font-family: 'Fredoka', 'Nunito', sans-serif;
+  font-size: 0.95rem; font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  padding: 0 2px 6px;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 10px;
+}
+.prod-group-cart .prod-group-label { color: var(--green-dark); border-bottom-color: var(--green); }
+.prod-group-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
 
 .prod-card {
   background: white;
@@ -798,6 +809,6 @@ nav {
 <div class="toast" id="toast"></div>
 
 <script src="/static/app.js"></script>
-<div class="app-version">2.2.0</div>
+<div class="app-version">2.3.0</div>
 </body>
 </html>
