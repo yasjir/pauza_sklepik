@@ -225,6 +225,22 @@ nav {
 .prod-card:hover { border-color: var(--primary); transform: translateY(-2px); box-shadow: var(--shadow); }
 .prod-card.unavailable { opacity: 0.45; cursor: not-allowed; }
 .prod-card.unavailable:hover { transform: none; border-color: transparent; }
+.prod-card.in-cart {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(46,204,113,0.2), var(--shadow);
+}
+.cart-qty-badge {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  background: var(--green);
+  color: white;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 900;
+  padding: 2px 8px;
+  line-height: 1.4;
+}
 
 .prod-img { width: 72px; height: 72px; border-radius: 14px; object-fit: cover; margin: 0 auto 8px; display: block; }
 .prod-emoji { font-size: 3rem; line-height: 1; margin-bottom: 8px; display: block; }
@@ -1204,19 +1220,35 @@ function renderProducts() {
     return;
   }
 
+  // Produkty z koszyka na górę
+  list.sort((a, b) => {
+    const aInCart = cart.some(c => c.id === a.id) ? 0 : 1;
+    const bInCart = cart.some(c => c.id === b.id) ? 0 : 1;
+    return aInCart - bInCart;
+  });
+
   grid.innerHTML = '';
   list.forEach(p => {
     const stockLabel = p.stock === 0 ? 'Brak' : p.stock <= 3 ? `Ostatnie ${p.stock}` : `${p.stock} szt.`;
     const pillClass  = p.stock === 0 ? 'empty' : p.stock <= 3 ? 'low' : '';
 
+    const cartItem = cart.find(c => c.id === p.id);
+
     const card = document.createElement('div');
-    card.className = 'prod-card' + (p.stock === 0 ? ' unavailable' : '');
+    card.className = 'prod-card' + (p.stock === 0 ? ' unavailable' : '') + (cartItem ? ' in-cart' : '');
     if (p.stock > 0) card.addEventListener('click', () => addToCart(p.id));
 
     const pill = document.createElement('span');
     pill.className = 'stock-pill' + (pillClass ? ' ' + pillClass : '');
     pill.textContent = stockLabel;
     card.appendChild(pill);
+
+    if (cartItem) {
+      const badge = document.createElement('span');
+      badge.className = 'cart-qty-badge';
+      badge.textContent = `🛒 ×${cartItem.qty}`;
+      card.appendChild(badge);
+    }
 
     if (p.img) {
       const img = document.createElement('img');
@@ -1280,6 +1312,7 @@ function renderCart() {
     document.getElementById('cartTotal').textContent = '0,00 zł';
     npValue = '';
     updateNumDisplay();
+    renderProducts();
     return;
   }
   el.innerHTML = cart.map(item => {
@@ -1302,6 +1335,7 @@ function renderCart() {
   }).join('');
   document.getElementById('cartTotal').textContent = fPLN(cartTotal());
   updateNumDisplay();
+  renderProducts();
 }
 
 function clearCart() {
@@ -1972,6 +2006,6 @@ if ('serviceWorker' in navigator) {
   });
 }
 </script>
-<div class="app-version">2.0.0</div>
+<div class="app-version">2.1.2</div>
 </body>
 </html>

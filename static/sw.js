@@ -4,7 +4,7 @@
 //
 // Aby wymusić aktualizację po deploymencie: zmień CACHE_NAME (np. sklepik-v2)
 
-const CACHE_NAME = 'sklepik-v8';
+const CACHE_NAME = 'sklepik-v11';
 
 // Zasoby pre-cachowane przy instalacji SW (cały UI shell)
 const PRECACHE_URLS = [
@@ -54,8 +54,9 @@ self.addEventListener('fetch', event => {
       // Zasób nie w cache — pobierz z sieci i dodaj do cache
       return fetch(event.request).then(response => {
         if (response.ok && response.type === 'basic') {
+          const cloned = response.clone();
           caches.open(CACHE_NAME)
-            .then(cache => cache.put(event.request, response.clone()));
+            .then(cache => cache.put(event.request, cloned));
         }
         return response;
       }).catch(() => {

@@ -195,6 +195,15 @@ Wszystkie (poza `/api/ping`) wymagają aktywnej sesji (401 → redirect do login
 - `updateConnectionBadge()` — aktualizuje wskaźnik w nagłówku (online/offline/syncing + chip z liczbą oczekujących)
 - `startProbeLoop()` / `stopProbeLoop()` — sondowanie co 15s gdy offline
 
+## Zasada obowiązkowa przy każdej zmianie frontendu
+
+**Po każdej zmianie kodu** (`templates/index.html`, `static/sw.js`, CSS, JS, fonty, ikony) zawsze wykonaj dwa kroki:
+
+1. Podbij `CACHE_NAME` w `static/sw.js` (np. `'sklepik-v8'` → `'sklepik-v9'`) — wymusza pobranie nowej wersji przez Chrome
+2. Podbij wersję aplikacji w `templates/index.html` w elemencie `<div class="app-version">` (semver: patch dla bugfixów, minor dla nowych funkcji)
+
+Bez tego użytkownicy będą widzieć starą wersję z cache service workera.
+
 ## Typowe zadania
 
 **Wymuś aktualizację PWA po deploymencie:** zmień `CACHE_NAME` w `static/sw.js` (np. `'sklepik-v1'` → `'sklepik-v2'`). Chrome wykrywa zmianę sw.js przy każdym otwarciu (nagłówek `no-cache`).
