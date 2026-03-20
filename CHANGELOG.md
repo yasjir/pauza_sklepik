@@ -4,6 +4,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [2.7.0] — 2026-03-20
+
+### Added
+- **Physical keyboard support for numpad** — on the Sales tab, the payment amount can now be typed directly from a physical keyboard or numpad instead of clicking the on-screen buttons. Digit keys (0–9, including numpad) append to the payment display; **Backspace** deletes the last digit; **Delete** / **Escape** clears the field; **Enter** confirms the sale (equivalent to clicking ZATWIERDŹ). The hardware barcode scanner continues to work unchanged — fast keystrokes (< 60 ms apart) are still accumulated as a barcode, while slow (human) keystrokes are routed to the numpad. Scanning a product also clears the numpad display to avoid stale digits from the first character of a barcode.
+
+---
+
 ## [2.6.0] — 2026-03-16
 
 ### Added

@@ -1207,6 +1207,13 @@ function initHwScanner() {
     if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
 
     const now = Date.now();
+    const onSellPage = document.querySelector('.page.active')?.id === 'page-sell';
+
+    // Klawisze specjalne numpadu na stronie sprzedaży (obsługa klawiatury fizycznej)
+    if (onSellPage) {
+      if (e.key === 'Backspace') { e.preventDefault(); npDelete(); return; }
+      if (e.key === 'Delete' || e.key === 'Escape') { e.preventDefault(); npClear(); return; }
+    }
 
     if (e.key === 'Enter') {
       if (hwScanBuf.length >= MIN_LEN) {
@@ -1218,14 +1225,22 @@ function initHwScanner() {
         if (mode) { scannerMode = mode; handleScannedCode(code); }
       } else {
         hwScanBuf = '';
+        // Manualne wciśnięcie Enter na stronie sprzedaży → zatwierdź sprzedaż
+        if (onSellPage) { e.preventDefault(); finalize(); }
       }
       return;
     }
 
     if (e.key.length === 1) {
+      // Wolne wciśnięcie (manualne) = człowiek; szybkie = skaner HW
+      const isManualKeystroke = hwScanBuf.length === 0 || (now - hwScanTs) > INTERVAL;
       if (hwScanBuf.length > 0 && (now - hwScanTs) > INTERVAL) hwScanBuf = '';
       hwScanBuf += e.key;
       hwScanTs = now;
+      // Cyfry wpisane manualnie na stronie sprzedaży → numpad
+      if (onSellPage && isManualKeystroke && /^\d$/.test(e.key)) {
+        npDigit(e.key);
+      }
     }
   });
 }
@@ -1294,7 +1309,7 @@ function handleScannedCode(code) {
   if (scannerMode === 'sell') {
     const p = products.find(x => x.barcode === code);
     if (p) {
-      if (p.stock > 0) { addToCart(p.id); showToast(`✅ ${p.name} dodano!`, 'green'); }
+      if (p.stock > 0) { addToCart(p.id); npValue = ''; updateNumDisplay(); showToast(`✅ ${p.name} dodano!`, 'green'); }
       else showToast('❌ Brak w magazynie!', 'red');
     } else showToast('❓ Nieznany kod: ' + code, 'red');
   } else if (scannerMode === 'stock') {
