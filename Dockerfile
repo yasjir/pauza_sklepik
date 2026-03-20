@@ -2,17 +2,17 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Skopiuj zależności i zainstaluj je najpierw (cache Dockera)
+# Copy dependencies and install them first (Docker layer cache)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Skopiuj resztę aplikacji
+# Copy the rest of the application
 COPY . .
 
-# Katalog na bazę danych SQLite
+# Directory for the SQLite database
 RUN mkdir -p /app/data
 
 EXPOSE 6060
 
-# gunicorn: 2 workery wystarczą dla szkolnego sklepiku
+# gunicorn: 2 workers are enough for a school shop
 CMD ["gunicorn", "--bind", "0.0.0.0:6060", "--workers", "2", "--timeout", "60", "app:app"]

@@ -1,14 +1,14 @@
 // Service Worker — Sklepik Szkolny PWA
-// Strategia: Cache-First dla zasobów UI, Network-Only dla /api/*
-// Istniejący IndexedDB w aplikacji obsługuje offline dla wywołań API.
+// Strategy: Cache-First for UI assets, Network-Only for /api/*
+// The app's existing IndexedDB handles offline data for API calls.
 //
-// Aby wymusić aktualizację po deploymencie: zmień CACHE_NAME (np. sklepik-v2)
+// To force an update after deployment: change CACHE_NAME (e.g. sklepik-v2)
 
 const CACHE_NAME = 'sklepik-v19';
 
-// Zasoby pre-cachowane przy instalacji SW (cały UI shell)
-// UWAGA: '/login' celowo pominięte — serwer może przekierować na '/app' jeśli użytkownik jest zalogowany,
-// co spowodowałoby zcachowanie złej strony pod kluczem '/login' → ERR_FAILED po wylogowaniu.
+// Resources pre-cached on SW install (entire UI shell)
+// NOTE: '/login' intentionally excluded — server may redirect to '/app' if user is logged in,
+// which would cache the wrong page under the '/login' key → ERR_FAILED after logout.
 const PRECACHE_URLS = [
   '/app',
   '/static/app.js',
@@ -19,7 +19,7 @@ const PRECACHE_URLS = [
   '/static/fonts/Nunito-latin-ext.woff2',
 ];
 
-// ============ INSTALL — pre-cachuj UI shell ============
+// ============ INSTALL — pre-cache UI shell ============
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
@@ -28,7 +28,7 @@ self.addEventListener('install', event => {
   );
 });
 
-// ============ ACTIVATE — usuń stare cache ============
+// ============ ACTIVATE — remove old caches ============
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys()
@@ -43,18 +43,18 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
-  // /api/*, /logout, /login — nie przechwytuj; obsługa natywna przez przeglądarkę
-  // /login musi zawsze trafiać do sieci — serwer obsługuje logikę auth (redirect jeśli zalogowany)
+  // /api/*, /logout, /login — do not intercept; handled natively by the browser
+  // /login must always go to the network — server handles auth logic (redirect if logged in)
   if (url.pathname.startsWith('/api/') || url.pathname === '/logout' || url.pathname === '/login') return;
 
-  // Tylko GET
+  // GET only
   if (event.request.method !== 'GET') return;
 
   event.respondWith(
     caches.match(event.request).then(cached => {
       if (cached) return cached;
 
-      // Zasób nie w cache — pobierz z sieci i dodaj do cache
+      // Resource not in cache — fetch from network and add to cache
       return fetch(event.request).then(response => {
         if (response.ok && response.type === 'basic') {
           const cloned = response.clone();
@@ -63,7 +63,7 @@ self.addEventListener('fetch', event => {
         }
         return response;
       }).catch(() => {
-        // Brak sieci i brak cache — fallback na stronę apki (login nie jest cachowany)
+        // No network and no cache — fall back to app page (login is not cached)
         return caches.match('/app');
       });
     })

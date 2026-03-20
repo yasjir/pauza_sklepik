@@ -1,6 +1,6 @@
-# generate_icons.py — Jednorazowy skrypt do generowania ikon PWA
-# Uruchom raz lokalnie: python generate_icons.py
-# Wymaga: pip install pillow
+# generate_icons.py — One-time script to generate PWA icons
+# Run once locally: python generate_icons.py
+# Requires: pip install pillow
 
 from PIL import Image, ImageDraw
 import os
@@ -14,20 +14,20 @@ def make_icon(size):
     s = size
     lw = max(2, size // 32)
 
-    # Koszyk — uchwyt (łuk)
+    # Cart — handle (arc)
     draw.arc(
         [s * 0.22, s * 0.15, s * 0.55, s * 0.45],
         start=180, end=0,
         fill='white', width=lw
     )
-    # Koszyk — korpus
+    # Cart — body
     draw.polygon([
         (s * 0.15, s * 0.42),
         (s * 0.85, s * 0.42),
         (s * 0.74, s * 0.74),
         (s * 0.26, s * 0.74),
     ], fill='white')
-    # Kółka
+    # Wheels
     r = s * 0.07
     cx1, cy = s * 0.36, s * 0.81
     draw.ellipse([cx1 - r, cy - r, cx1 + r, cy + r], fill='white')

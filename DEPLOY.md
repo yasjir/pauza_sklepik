@@ -1,44 +1,44 @@
-# Instrukcja wdrożenia — Sklepik Szkolny
+# Deployment Guide — Sklepik Szkolny
 
-## Lokalnie z Docker (najszybszy start)
+## Local with Docker (quickest start)
 
 ```bash
 cp .env.example .env
-# Edytuj .env i ustaw SECRET_KEY na losowy ciąg znaków
+# Edit .env and set SECRET_KEY to a random string
 
 docker compose up --build
 ```
 
-Apka dostępna pod: **http://localhost:5000**
-Dane bazy w katalogu `./data/sklepik.db` (persystują przez restartami).
+App available at: **http://localhost:5000**
+Database stored in `./data/sklepik.db` (persists across restarts).
 
 ---
 
-## PythonAnywhere — darmowy hosting (zalecany)
+## PythonAnywhere — free hosting (recommended)
 
-> Darmowe konto wystarczy dla szkolnego sklepiku (max 5 użytkowników).
-> Apka **nie zasypia** — jest dostępna całą dobę.
+> A free account is sufficient for a school shop (up to 5 users).
+> The app **never sleeps** — available 24/7.
 
-### 1. Zarejestruj konto
+### 1. Create an account
 
-Wejdź na [pythonanywhere.com](https://www.pythonanywhere.com) i utwórz darmowe konto.
+Go to [pythonanywhere.com](https://www.pythonanywhere.com) and sign up for a free account.
 
-### 2. Wgraj pliki
+### 2. Upload files
 
-W zakładce **Files** utwórz katalog `sklepik` i wgraj:
+In the **Files** tab, create a `sklepik` directory and upload:
 - `app.py`
 - `requirements.txt`
 - `templates/login.html`
 - `templates/index.html`
 
-Albo przez konsolę Bash (jeśli masz repo na GitHubie):
+Or via the Bash console (if you have the repo on GitHub):
 ```bash
-git clone https://github.com/TWOJE-REPO/sklepik.git ~/sklepik
+git clone https://github.com/YOUR-REPO/sklepik.git ~/sklepik
 ```
 
-### 3. Zainstaluj zależności
+### 3. Install dependencies
 
-W zakładce **Consoles** otwórz **Bash** i wykonaj:
+In the **Consoles** tab open **Bash** and run:
 ```bash
 cd ~/sklepik
 python3 -m venv venv
@@ -47,96 +47,94 @@ pip install -r requirements.txt
 mkdir -p data
 ```
 
-> Używamy virtualenv żeby uniknąć konfliktów z innymi pakietami zainstalowanymi w systemie PythonAnywhere (np. `dash`). Jeśli pojawią się ostrzeżenia o konfliktach — możesz je zignorować, o ile dotyczą pakietów spoza tego projektu.
+> We use a virtualenv to avoid conflicts with other packages installed in the PythonAnywhere system (e.g. `dash`). If you see conflict warnings — you can ignore them as long as they concern packages outside this project.
 
-### 4. Utwórz aplikację webową
+### 4. Create a web app
 
-Zakładka **Web** → **Add a new web app** → **Manual configuration** → **Python 3.10**
+**Web** tab → **Add a new web app** → **Manual configuration** → **Python 3.10**
 
-W sekcji **Code**:
-- Source code: `/home/TWOJA_NAZWA/sklepik`
-- Working directory: `/home/TWOJA_NAZWA/sklepik`
-- WSGI configuration file: kliknij link i zastąp zawartość tym:
+In the **Code** section:
+- Source code: `/home/YOUR_USERNAME/sklepik`
+- Working directory: `/home/YOUR_USERNAME/sklepik`
+- WSGI configuration file: click the link and replace the contents with:
 
 ```python
 import sys
-sys.path.insert(0, '/home/TWOJA_NAZWA/sklepik')
+sys.path.insert(0, '/home/YOUR_USERNAME/sklepik')
 
 from app import app as application
 ```
 
-W sekcji **Virtualenv**:
-- Wpisz ścieżkę do venv: `/home/TWOJA_NAZWA/sklepik/venv`
+In the **Virtualenv** section:
+- Enter the path to the venv: `/home/YOUR_USERNAME/sklepik/venv`
 
-### 5. Ustaw zmienne środowiskowe
+### 5. Set environment variables
 
-W sekcji **Environment variables** dodaj:
+In the **Environment variables** section add:
 ```
-SECRET_KEY = wklej-tutaj-losowy-klucz-min-32-znaki
+SECRET_KEY = paste-a-random-key-min-32-chars-here
 ```
 
-Wygeneruj klucz w konsoli Bash:
+Generate a key in the Bash console:
 ```bash
 python -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-### 6. Uruchom
+### 6. Start the app
 
-Kliknij **Reload** w zakładce Web.
+Click **Reload** in the Web tab.
 
-Apka dostępna pod: **https://TWOJA_NAZWA.pythonanywhere.com**
+App available at: **https://YOUR_USERNAME.pythonanywhere.com**
 
-### 7. Pierwsze logowanie
+### 7. First login
 
-- Login: `admin`
-- Hasło: `admin`
-- **Natychmiast zmień hasło!** (zakładka Konta → usuń stare konto admin i utwórz nowe)
+- Username: `admin`
+- Password: `admin`
+- **Change the password immediately!** (Accounts tab → delete the old admin account and create a new one)
 
 ---
 
-## Railway.app — płatny ($2-5/mies.)
+## Railway.app — paid ($2-5/month)
 
-Railway automatycznie wykrywa Dockerfile.
+Railway auto-detects the Dockerfile.
 
 ```bash
-# Zainstaluj Railway CLI
+# Install Railway CLI
 npm install -g @railway/cli
 
-# Zaloguj się i deploy
+# Log in and deploy
 railway login
 railway init
 railway up
 ```
 
-W panelu Railway dodaj zmienną środowiskową `SECRET_KEY`.
+Add the `SECRET_KEY` environment variable in the Railway dashboard.
 
 ---
 
 ## Render.com
 
-1. Połącz repozytorium GitHub z Render
-2. New Web Service → wybierz repo
-3. Render wykryje Dockerfile automatycznie
-4. Dodaj `SECRET_KEY` w Environment Variables
+1. Connect your GitHub repository to Render
+2. New Web Service → select the repo
+3. Render will detect the Dockerfile automatically
+4. Add `SECRET_KEY` in Environment Variables
 5. Deploy
 
-> Uwaga: darmowy tier na Render **zasypia po 15 min bezczynności** — pierwsze otwarcie po przerwie zajmie ~30 sekund.
+> Note: the free tier on Render **sleeps after 15 minutes of inactivity** — the first request after a pause will take ~30 seconds.
 
 ---
 
-## Zmienne środowiskowe
+## Environment variables
 
-| Zmienna | Opis | Wymagana |
+| Variable | Description | Required |
 |---|---|---|
-| `SECRET_KEY` | Klucz do podpisywania sesji (min. 32 znaki) | **TAK** |
-| `DATABASE_URL` | URL bazy danych (domyślnie SQLite) | nie |
+| `SECRET_KEY` | Session signing key (min. 32 chars) | **YES** |
+| `DATABASE_URL` | Database URL (defaults to SQLite) | no |
 
 ---
 
-## Backup i przywracanie danych
+## Backup and restore
 
-- **Backup**: zaloguj się jako admin → zakładka **Backup** → **Pełny backup**
-- **Przywracanie**: ta sama zakładka → Import → wybierz plik JSON
+- **Backup**: log in as admin → **Backup** tab → **Full backup**
+- **Restore**: same tab → Import → select the JSON file
 
-Format backupu jest kompatybilny z oryginalną statyczną wersją (`sklepik_pro.html`).
-Możesz zaimportować stare dane z localStorage eksportując je przez oryginalną apkę.

@@ -1,4 +1,4 @@
-// ================== ESCAPOWANIE HTML (ochrona przed XSS) ==================
+// ================== HTML ESCAPING (XSS protection) ==================
 function h(str) {
   if (str === null || str === undefined) return '';
   return String(str)
@@ -9,23 +9,23 @@ function h(str) {
     .replace(/'/g,  '&#039;');
 }
 
-// ================== STAN GLOBALNY ==================
-let products = [];          // ładowane z API
-let cart = [];              // klient-side, nie trafia do bazy
+// ================== GLOBAL STATE ==================
+let products = [];          // loaded from API
+let cart = [];              // client-side only, not persisted to DB
 let editingId = null;
 let pendingImgData = null;
 let scannerMode = null;     // 'sell', 'stock', 'modal'
-let hwScanBuf = '';         // bufor klawiszy z czytnika HW
-let hwScanTs  = 0;          // timestamp ostatniego znaku (ms)
+let hwScanBuf = '';         // keystroke buffer from HW barcode scanner
+let hwScanTs  = 0;          // timestamp of last character (ms)
 let npValue = '';
 let activeCategory = 'Wszystkie';
 let activeStockCategory = 'Wszystkie';
 let currentUser          = null;
-let currentUserFromCache = false;   // true gdy załadowany z IndexedDB offline
+let currentUserFromCache = false;   // true when loaded from IndexedDB while offline
 let importData           = null;
-let isOnline = true;          // aktualny stan połączenia
-let probeInterval = null;     // handle setInterval dla sondowania offline
-let syncInProgress = false;   // blokada przed równoczesną synchronizacją
+let isOnline = true;          // current connection state
+let probeInterval = null;     // setInterval handle for offline connectivity polling
+let syncInProgress = false;   // mutex to prevent concurrent sync
 
 // ================== OFFLINE DB (IndexedDB) ==================
 const offlineDB = (() => {
@@ -254,7 +254,7 @@ async function api(method, path, body) {
       throw new Error(data.error || `Błąd ${res.status}`);
     }
 
-    // Udana odpowiedź = jesteśmy online
+    // Successful response means we're online
     if (!isOnline) setOnlineState(true);
 
     return res.headers.get('content-type')?.includes('json')
@@ -278,20 +278,20 @@ async function api(method, path, body) {
 async function init() {
   await offlineDB.openDB().catch(e => console.warn('IDB openDB:', e));
 
-  // Sprawdź łączność przed próbą API
+  // Check connectivity before attempting API call
   const reachable = await probeConnectivity();
   setOnlineState(reachable);
 
-  // Sprawdź sesję
+  // Check session
   try {
     currentUser = await api('GET', '/api/me');
     if (!currentUser) return;
     currentUserFromCache = false;
-    // Cachuj tylko minimalne dane — bez is_admin żeby nie dawać fałszywych uprawnień offline
+    // Cache minimal data only — without is_admin to avoid false admin privileges while offline
     offlineDB.saveCurrentUser({ id: currentUser.id, username: currentUser.username }).catch(() => {});
   } catch (e) {
     if (e.isOffline) {
-      // Brak sieci — spróbuj załadować z cache (bez is_admin — tylko sprzedaż dostępna offline)
+      // No network — try loading from cache (without is_admin — only Sales tab available offline)
       currentUser = await offlineDB.getCachedUser().catch(() => null);
       currentUserFromCache = true;
       if (!currentUser) {
@@ -305,12 +305,12 @@ async function init() {
 
   document.getElementById('headerUsername').textContent = currentUser.username;
 
-  // Pokaż elementy admina jeśli admin (tylko gdy dane z serwera — nie z cache offline)
+  // Show admin elements if admin (only when data is from server — not from offline cache)
   if (currentUser.is_admin && !currentUserFromCache) {
     document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'flex');
   }
 
-  // Wymuś zmianę hasła jeśli admin/admin lub nowe konto z flagą must_change_password
+  // Force password change for admin/admin or new accounts with must_change_password flag
   if (currentUser.must_change_password) {
     openPasswordModal(true);
   }
@@ -328,7 +328,7 @@ async function init() {
   renderQuickAmounts();
   await updateConnectionBadge();
 
-  // Zsynchronizuj oczekujące sprzedaże z poprzedniej sesji offline
+  // Sync pending sales from a previous offline session
   if (isOnline) syncPendingSales();
 
   initHwScanner();
@@ -473,7 +473,7 @@ function renderProducts() {
   const inCart    = list.filter(p =>  cart.some(c => c.id === p.id)).sort((a, b) => a.name.localeCompare(b.name, 'pl'));
   const notInCart = list.filter(p => !cart.some(c => c.id === p.id));
 
-  // Grupuj wg kategorii, sortuj alfabetycznie w grupie
+  // Group by category, sort alphabetically within each group
   const groupMap = {};
   notInCart.forEach(p => {
     const cat = p.category || 'Inne';
@@ -602,7 +602,7 @@ function updateNumDisplay() {
   }
 }
 
-// ================== FINALIZACJA SPRZEDAŻY ==================
+// ================== FINALIZE SALE ==================
 async function finalize() {
   if (cart.length === 0) { showToast('❌ Koszyk jest pusty!', 'red'); return; }
   const paid  = parseInt(npValue) || 0;
@@ -660,7 +660,7 @@ async function saveOfflineSale(currentCart, paid, total) {
   showToast(`📴 Sprzedano offline (${fPLN(total)}) — zostanie zsynchronizowane`, 'orange');
 }
 
-// ================== SYNCHRONIZACJA OFFLINE ==================
+// ================== OFFLINE SYNC ==================
 async function syncPendingSales() {
   if (syncInProgress) return;
   const pending = await offlineDB.getPendingSales().catch(() => []);
@@ -678,7 +678,7 @@ async function syncPendingSales() {
       await offlineDB.removePendingSale(sale.localId);
       synced++;
     } catch (e) {
-      if (e.isOffline) break;   // połączenie znikło — przerwij, zostaw resztę
+      if (e.isOffline) break;   // connection dropped — abort, leave the rest in queue
       failed.push({ sale, reason: e.message });
     }
   }
@@ -704,7 +704,7 @@ async function syncPendingSales() {
   }
 }
 
-// ================== MAGAZYN ==================
+// ================== STOCK ==================
 function renderStockCategories() {
   const el = document.getElementById('stockCatFilter');
   if (!el) return;
@@ -770,7 +770,7 @@ function renderStock() {
     </div>`;
   }
 
-  // Grupuj wg kategorii, sortuj alfabetycznie w grupie
+  // Group by category, sort alphabetically within each group
   const groupMap = {};
   list.forEach(p => {
     const cat = p.category || 'Inne';
@@ -819,7 +819,7 @@ async function delProduct(id) {
   }
 }
 
-// ================== MODAL PRODUKTU ==================
+// ================== PRODUCT MODAL ==================
 function openAddModal() {
   editingId = null;
   pendingImgData = null;
@@ -862,7 +862,7 @@ function removeImg() {
   document.getElementById('imgPreviewBox').style.display = 'none';
 }
 
-// Resize zdjęcia do max 300px w JS (przed wysłaniem do API) — tani i sprawdzony sposób
+// Client-side image resize to max 300px before sending to API
 function handleImg(input) {
   const file = input.files[0];
   if (!file) return;
@@ -919,7 +919,7 @@ async function saveProduct() {
   }
 }
 
-// ================== UŻYTKOWNICY ==================
+// ================== USERS ==================
 async function renderUsers() {
   const data = await api('GET', '/api/users');
   if (!data) return;
@@ -986,7 +986,7 @@ async function deleteUser(id, username) {
   }
 }
 
-// ================== RAPORT ==================
+// ================== REPORT ==================
 const REPORT_PAGE_SIZE = 20;
 let reportPage     = 1;
 let reportAllSales = [];
@@ -1019,7 +1019,7 @@ async function renderReport() {
   document.getElementById('rTrans').textContent   = reportAllSales.length;
   document.getElementById('rItems').textContent   = itemCount;
 
-  // Nagłówek wydruku
+  // Print header
   if (dateFrom && dateTo && dateFrom === dateTo) {
     const d = new Date(dateFrom + 'T12:00:00');
     document.getElementById('printDateStr').textContent =
@@ -1095,7 +1095,7 @@ function goReportPage(n) {
 
 function doPrint() {
   renderReport().then(() => {
-    // Przed drukowaniem: pokaż wszystkie wiersze
+    // Before printing: show all rows
     const tbody = document.getElementById('reportBody');
     const saved = tbody.innerHTML;
     tbody.innerHTML = reportAllSales.map(_reportRowHtml).join('');
@@ -1104,14 +1104,14 @@ function doPrint() {
   });
 }
 
-// ================== WYLOGOWANIE ==================
+// ================== LOGOUT ==================
 async function doLogout() {
-  // Wyczyść cached user z IDB przed wylogowaniem — zapobiega załadowaniu apki ze starą sesją po nowym logowaniu
+  // Clear cached user from IDB before logout — prevents app loading with stale session on next login
   await offlineDB.saveCurrentUser(null).catch(() => {});
   window.location.href = '/logout';
 }
 
-// ================== ZMIANA HASŁA ==================
+// ================== PASSWORD CHANGE ==================
 function openPasswordModal(forced = false) {
   ['pwOld', 'pwNew', 'pwConfirm'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('passwordForcedInfo').style.display = forced ? 'block' : 'none';
@@ -1197,10 +1197,10 @@ async function doImport() {
   }
 }
 
-// ================== SKANER ==================
+// ================== SCANNER ==================
 function initHwScanner() {
-  const INTERVAL = 60; // ms — max odstęp między znakami czytnika HW (człowiek pisze wolniej)
-  const MIN_LEN  = 4;  // minimalna długość kodu
+  const INTERVAL = 60; // ms — max gap between HW scanner characters (humans type slower)
+  const MIN_LEN  = 4;  // minimum barcode length
 
   document.addEventListener('keydown', (e) => {
     const ae = document.activeElement;
@@ -1209,7 +1209,7 @@ function initHwScanner() {
     const now = Date.now();
     const onSellPage = document.querySelector('.page.active')?.id === 'page-sell';
 
-    // Klawisze specjalne numpadu na stronie sprzedaży (obsługa klawiatury fizycznej)
+    // Special numpad keys on the Sales page (physical keyboard support)
     if (onSellPage) {
       if (e.key === 'Backspace') { e.preventDefault(); npDelete(); return; }
       if (e.key === 'Delete' || e.key === 'Escape') { e.preventDefault(); npClear(); return; }
@@ -1225,19 +1225,19 @@ function initHwScanner() {
         if (mode) { scannerMode = mode; handleScannedCode(code); }
       } else {
         hwScanBuf = '';
-        // Manualne wciśnięcie Enter na stronie sprzedaży → zatwierdź sprzedaż
+        // Manual Enter on the Sales page → confirm sale
         if (onSellPage) { e.preventDefault(); finalize(); }
       }
       return;
     }
 
     if (e.key.length === 1) {
-      // Wolne wciśnięcie (manualne) = człowiek; szybkie = skaner HW
+      // Slow keystroke (manual) = human; fast = HW scanner
       const isManualKeystroke = hwScanBuf.length === 0 || (now - hwScanTs) > INTERVAL;
       if (hwScanBuf.length > 0 && (now - hwScanTs) > INTERVAL) hwScanBuf = '';
       hwScanBuf += e.key;
       hwScanTs = now;
-      // Cyfry wpisane manualnie na stronie sprzedaży → numpad
+      // Digits typed manually on the Sales page → numpad
       if (onSellPage && isManualKeystroke && /^\d$/.test(e.key)) {
         npDigit(e.key);
       }

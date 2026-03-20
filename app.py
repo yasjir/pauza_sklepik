@@ -1,6 +1,6 @@
 # app.py — Sklepik Szkolny Backend
-# Prosty backend Flask dla szkolnego punktu sprzedaży.
-# Jeden plik: konfiguracja, modele, autoryzacja, wszystkie endpointy.
+# Simple Flask backend for a school point-of-sale system.
+# Single file: configuration, models, auth, all endpoints.
 
 import os
 import io
@@ -20,13 +20,13 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 
 # ============================================================
-# RATE LIMITING (ochrona przed brute-force na /login)
+# RATE LIMITING (brute-force protection for /login)
 # ============================================================
 
 _login_attempts: dict = defaultdict(list)
 
 def _check_login_rate(ip: str, limit: int = 10, window: int = 60) -> bool:
-    """Zwraca False jeśli IP przekroczyło limit prób w oknie czasowym."""
+    """Returns False if the IP has exceeded the attempt limit within the time window."""
     now = time.time()
     _login_attempts[ip] = [t for t in _login_attempts[ip] if now - t < window]
     if len(_login_attempts[ip]) >= limit:
@@ -36,18 +36,18 @@ def _check_login_rate(ip: str, limit: int = 10, window: int = 60) -> bool:
 
 
 # ============================================================
-# KONFIGURACJA
+# CONFIGURATION
 # ============================================================
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-ZMIEN-NA-PRODUKCJI')
 
-# Baza danych: SQLite lokalnie (ścieżka absolutna obok app.py), lub przekaż DATABASE_URL
-# Używamy ścieżki absolutnej żeby gunicorn działał niezależnie od CWD procesu
+# Database: SQLite locally (absolute path next to app.py), or pass DATABASE_URL
+# Using absolute path so gunicorn works regardless of the process CWD
 _base_dir = os.path.dirname(os.path.abspath(__file__))
 _data_dir  = os.path.join(_base_dir, 'data')
 db_url = os.environ.get('DATABASE_URL', f'sqlite:///{_data_dir}/sklepik.db')
-# Heroku/Railway daje URL zaczynający się od "postgres://" — SQLAlchemy potrzebuje "postgresql://"
+# Heroku/Railway provide URLs starting with "postgres://" — SQLAlchemy requires "postgresql://"
 if db_url.startswith('postgres://'):
     db_url = db_url.replace('postgres://', 'postgresql://', 1)
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
@@ -59,11 +59,11 @@ login_manager.login_view = 'login_page'
 
 
 # ============================================================
-# MODELE BAZY DANYCH
+# DATABASE MODELS
 # ============================================================
 
 class User(UserMixin, db.Model):
-    """Użytkownik systemu — sprzedawca lub admin."""
+    """System user — cashier or admin."""
     id                   = db.Column(db.Integer, primary_key=True)
     username             = db.Column(db.String(80), unique=True, nullable=False)
     password_hash        = db.Column(db.String(256), nullable=False)
@@ -86,15 +86,15 @@ class User(UserMixin, db.Model):
 
 
 class Product(db.Model):
-    """Produkt w sklepiku."""
+    """Product in the shop."""
     id       = db.Column(db.Integer, primary_key=True)
     name     = db.Column(db.String(200), nullable=False)
     emoji    = db.Column(db.String(10), default='🛒')
-    price    = db.Column(db.Integer, nullable=False)   # cena w groszach (1 zł = 100)
+    price    = db.Column(db.Integer, nullable=False)   # price in grosz (1 PLN = 100)
     stock    = db.Column(db.Integer, default=0)
     barcode  = db.Column(db.String(100), default='')
     category = db.Column(db.String(100), default='Inne')
-    img      = db.Column(db.Text, default='')          # base64 JPEG, ~20-40 KB po resize w JS
+    img      = db.Column(db.Text, default='')          # base64 JPEG, ~20-40 KB after JS resize
 
     def to_dict(self):
         return {
@@ -110,12 +110,12 @@ class Product(db.Model):
 
 
 class Sale(db.Model):
-    """Transakcja sprzedaży."""
+    """Sales transaction."""
     id      = db.Column(db.Integer, primary_key=True)
-    ts      = db.Column(db.BigInteger, nullable=False)  # timestamp ms (kompatybilny z JS Date.now())
+    ts      = db.Column(db.BigInteger, nullable=False)  # ms timestamp (compatible with JS Date.now())
     date    = db.Column(db.String(10),  nullable=False)  # YYYY-MM-DD
-    total   = db.Column(db.Integer,     nullable=False)  # suma w groszach
-    paid    = db.Column(db.Integer,     nullable=False)  # zapłacono w groszach
+    total   = db.Column(db.Integer,     nullable=False)  # total in grosz
+    paid    = db.Column(db.Integer,     nullable=False)  # amount paid in grosz
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     items   = db.relationship('SaleItem', backref='sale', cascade='all, delete-orphan')
 
@@ -131,18 +131,18 @@ class Sale(db.Model):
 
 
 class SaleItem(db.Model):
-    """Pozycja w transakcji (snapshot produktu — nazwa/cena nie zmienia się po edycji)."""
+    """Line item in a transaction (product snapshot — name/price frozen at time of sale)."""
     id         = db.Column(db.Integer, primary_key=True)
     sale_id    = db.Column(db.Integer, db.ForeignKey('sale.id'), nullable=False)
-    product_id = db.Column(db.Integer, nullable=True)  # NULL jeśli produkt został usunięty
+    product_id = db.Column(db.Integer, nullable=True)  # NULL if the product has been deleted
     name       = db.Column(db.String(200), nullable=False)
     emoji      = db.Column(db.String(10),  default='🛒')
     qty        = db.Column(db.Integer,     nullable=False)
-    price      = db.Column(db.Integer,     nullable=False)  # cena jednostkowa w groszach
+    price      = db.Column(db.Integer,     nullable=False)  # unit price in grosz
 
     def to_dict(self):
         return {
-            'id':         self.product_id,   # pole 'id' dla kompatybilności z frontendem
+            'id':         self.product_id,   # 'id' field for frontend compatibility
             'product_id': self.product_id,
             'name':       self.name,
             'emoji':      self.emoji,
@@ -152,11 +152,11 @@ class SaleItem(db.Model):
 
 
 class AuditLog(db.Model):
-    """Audit log — krytyczne akcje adminów i logowania."""
+    """Audit log — critical admin actions and logins."""
     id       = db.Column(db.Integer, primary_key=True)
     ts       = db.Column(db.BigInteger, nullable=False)
     user_id  = db.Column(db.Integer, nullable=True)
-    username = db.Column(db.String(80), nullable=True)   # snapshot — user może być usunięty
+    username = db.Column(db.String(80), nullable=True)   # snapshot — user may be deleted later
     action   = db.Column(db.String(100), nullable=False)
     detail   = db.Column(db.String(500), default='')
 
@@ -175,11 +175,11 @@ def load_user(user_id):
 
 
 # ============================================================
-# POMOCNICZE DEKORATORY
+# HELPER DECORATORS
 # ============================================================
 
 def admin_required(f):
-    """Endpoint dostępny tylko dla adminów."""
+    """Endpoint accessible to admins only."""
     @wraps(f)
     def decorated(*args, **kwargs):
         if not current_user.is_authenticated or not current_user.is_admin:
@@ -189,7 +189,7 @@ def admin_required(f):
 
 
 def log_action(action: str, detail: str = '') -> None:
-    """Zapisuje wpis audit logu do bieżącej sesji DB. Commit należy do wywołującego."""
+    """Writes an audit log entry to the current DB session. Caller is responsible for commit."""
     now = datetime.now(timezone.utc)
     uname = current_user.username if current_user.is_authenticated else None
     uid   = current_user.id       if current_user.is_authenticated else None
@@ -203,7 +203,7 @@ def log_action(action: str, detail: str = '') -> None:
 
 
 # ============================================================
-# AUTH — logowanie / wylogowanie
+# AUTH — login / logout
 # ============================================================
 
 @app.route('/')
@@ -221,12 +221,12 @@ def login_page():
     if request.method == 'GET':
         return render_template('login.html')
 
-    # Obsługuje zarówno JSON (fetch z JS) jak i zwykły form POST
+    # Accepts both JSON (fetch from JS) and regular form POST
     data = request.get_json(silent=True) or request.form
     username = data.get('username', '').strip()
     password = data.get('password', '')
 
-    # Rate limiting — max 10 prób logowania na minutę per IP
+    # Rate limiting — max 10 login attempts per minute per IP
     ip = request.headers.get('X-Forwarded-For', request.remote_addr or '').split(',')[0].strip()
     if not _check_login_rate(ip):
         if request.is_json:
@@ -263,19 +263,19 @@ def app_page():
 @app.route('/api/me')
 @login_required
 def api_me():
-    """Frontend wywołuje to przy starcie, żeby sprawdzić czy sesja jest aktywna."""
+    """Called by the frontend on startup to verify the session is active."""
     return jsonify(current_user.to_dict())
 
 
 @app.route('/api/ping', methods=['GET'])
 def api_ping():
-    """Lekki endpoint do sprawdzenia łączności — bez autoryzacji."""
+    """Lightweight connectivity check endpoint — no auth required."""
     return jsonify({'ok': True})
 
 
 @app.route('/sw.js')
 def service_worker():
-    """SW serwowany z / — Service-Worker-Allowed rozszerza scope na całą aplikację."""
+    """SW served from / — Service-Worker-Allowed extends scope to the entire application."""
     response = send_from_directory('static', 'sw.js')
     response.headers['Service-Worker-Allowed'] = '/'
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
@@ -284,12 +284,12 @@ def service_worker():
 
 @app.route('/manifest.json')
 def manifest():
-    """Manifest PWA serwowany z roota."""
+    """PWA manifest served from root."""
     return send_from_directory('static', 'manifest.json')
 
 
 # ============================================================
-# PRODUKTY
+# PRODUCTS
 # ============================================================
 
 @app.route('/api/products', methods=['GET'])
@@ -369,7 +369,7 @@ def restock_product(pid):
 
 
 # ============================================================
-# SPRZEDAŻ
+# SALES
 # ============================================================
 
 @app.route('/api/sales', methods=['GET'])
@@ -394,8 +394,8 @@ def get_sales():
 @login_required
 def create_sale():
     """
-    Zatwierdź sprzedaż. Sprawdza stock atomically (with_for_update),
-    żeby dwa tablety nie sprzedały tego samego towaru jednocześnie.
+    Commit a sale. Checks stock atomically (with_for_update)
+    so two tablets cannot sell the same item simultaneously.
     """
     d          = request.get_json()
     cart_items = d.get('items', [])   # [{id, qty}, ...]
@@ -404,7 +404,7 @@ def create_sale():
     if not cart_items:
         return jsonify({'error': 'Pusty koszyk'}), 400
 
-    # Zbierz produkty z lockiem wierszy (blokuje równoległe transakcje)
+    # Fetch products with row-level lock (blocks concurrent transactions)
     products_to_update = []
     sale_items_data    = []
     total              = 0
@@ -432,7 +432,7 @@ def create_sale():
         db.session.rollback()
         return jsonify({'error': 'Za mało gotówki'}), 400
 
-    # Wszystko OK — zapisz transakcję i odejmij stany
+    # All good — persist transaction and decrement stock
     now = datetime.now(timezone.utc)
     sale = Sale(
         ts      = int(now.timestamp() * 1000),
@@ -446,7 +446,7 @@ def create_sale():
     for p, qty in products_to_update:
         p.stock -= qty
 
-    db.session.flush()  # sale.id jest dostępne po flush()
+    db.session.flush()  # sale.id is available after flush()
 
     for item_data in sale_items_data:
         db.session.add(SaleItem(sale_id=sale.id, **item_data))
@@ -456,14 +456,14 @@ def create_sale():
 
 
 # ============================================================
-# BACKUP — eksport i import
+# BACKUP — export and import
 # ============================================================
 
 @app.route('/api/export', methods=['GET'])
 @login_required
 @admin_required
 def export_backup():
-    """Pobierz pełny backup jako plik JSON. Format kompatybilny z oryginalną statyczną apką."""
+    """Download full backup as a JSON file. Format compatible with the original static app."""
     backup = {
         'version':    2,
         'exportedAt': datetime.now(timezone.utc).isoformat(),
@@ -484,7 +484,7 @@ def export_backup():
 @login_required
 @admin_required
 def export_products():
-    """Pobierz tylko produkty (bez historii sprzedaży)."""
+    """Download products only (without sales history)."""
     backup = {
         'version':    2,
         'exportedAt': datetime.now(timezone.utc).isoformat(),
@@ -506,9 +506,9 @@ def export_products():
 @admin_required
 def import_backup():
     """
-    Wgraj backup — nadpisuje produkty, opcjonalnie też sprzedaż.
-    Domyślnie historia sprzedaży NIE jest kasowana — wymaga flagi _import_sales=true.
-    Akceptuje JSON w body lub plik multipart.
+    Upload backup — overwrites products, optionally sales too.
+    By default, sales history is NOT cleared — requires _import_sales=true flag.
+    Accepts JSON body or multipart file upload.
     """
     if request.is_json:
         data = request.get_json()
@@ -525,16 +525,16 @@ def import_backup():
     sales_data    = data.get('sales', [])
     import_sales  = bool(data.get('_import_sales', False))
 
-    # Walidacja: backup musi mieć niepustą listę produktów
+    # Validation: backup must have a non-empty product list
     if not isinstance(products_data, list) or len(products_data) == 0:
         return jsonify({'error': 'Backup nie zawiera produktów — import anulowany dla bezpieczeństwa'}), 400
 
-    # Sprawdź czy każdy produkt ma wymagane pola
+    # Validate that each product has the required fields
     for i, p in enumerate(products_data):
         if not isinstance(p, dict) or not p.get('name') or p.get('price') is None:
             return jsonify({'error': f'Produkt #{i+1} ma nieprawidłowy format (brak name/price)'}), 400
 
-    # Zastąp produkty (zawsze)
+    # Replace products (always)
     Product.query.delete()
     db.session.flush()
 
@@ -550,7 +550,7 @@ def import_backup():
             img      = p_data.get('img', ''),
         ))
 
-    # Historia sprzedaży — tylko jeśli admin wyraźnie tego zażądał
+    # Sales history — only if the admin explicitly requested it
     if import_sales:
         SaleItem.query.delete()
         Sale.query.delete()
@@ -589,7 +589,7 @@ def import_backup():
 
 
 # ============================================================
-# UŻYTKOWNICY (tylko admin)
+# USERS (admin only)
 # ============================================================
 
 @app.route('/api/users', methods=['GET'])
@@ -641,7 +641,7 @@ def delete_user(uid):
 @app.route('/api/users/<int:uid>/password', methods=['PUT'])
 @login_required
 def change_password(uid):
-    # Admin może zmienić hasło każdemu; użytkownik tylko sobie
+    # Admin can change anyone's password; regular user can only change their own
     if uid != current_user.id and not current_user.is_admin:
         return jsonify({'error': 'Brak uprawnień'}), 403
     d = request.get_json()
@@ -652,7 +652,7 @@ def change_password(uid):
     if not u:
         return jsonify({'error': 'Nie znaleziono użytkownika'}), 404
 
-    # Przy zmianie własnego hasła wymagaj starego — chyba że wymuszona zmiana (just logged in)
+    # When changing own password, require current password — unless it's a forced change (first login)
     if uid == current_user.id and not current_user.must_change_password:
         old_password = d.get('old_password', '')
         if not u.check_password(old_password):
@@ -669,33 +669,33 @@ def change_password(uid):
 @login_required
 @admin_required
 def get_audit():
-    """Ostatnie 200 wpisów audit logu."""
+    """Last 200 audit log entries."""
     entries = AuditLog.query.order_by(AuditLog.ts.desc()).limit(200).all()
     return jsonify([e.to_dict() for e in entries])
 
 
 # ============================================================
-# INICJALIZACJA BAZY DANYCH
+# DATABASE INITIALISATION
 # ============================================================
 
 def init_db():
-    """Utwórz tabele i wstaw domyślne dane przy pierwszym uruchomieniu."""
+    """Create tables and insert default data on first run."""
     os.makedirs(_data_dir, exist_ok=True)
     db.create_all()
 
-    # Migracja: dodaj kolumnę must_change_password jeśli brakuje (istniejące bazy danych)
+    # Migration: add must_change_password column if missing (existing databases)
     with db.engine.connect() as conn:
         try:
             conn.execute(db.text('ALTER TABLE "user" ADD COLUMN must_change_password BOOLEAN DEFAULT 0'))
             conn.commit()
         except Exception:
-            pass  # kolumna już istnieje
+            pass  # column already exists
 
     if User.query.count() == 0:
         admin = User(username='admin', is_admin=True, must_change_password=True)
         admin.set_password('admin')
         db.session.add(admin)
-        print('✅ Konto admin/admin zostało utworzone — zmiana hasła wymuszona przy pierwszym logowaniu!')
+        print('✅ admin/admin account created — password change required on first login!')
 
     if Product.query.count() == 0:
         demo = [
@@ -707,7 +707,7 @@ def init_db():
             Product(name='Chipsy',     emoji='🍟', price=350, stock=12, category='Przekąski'),
         ]
         db.session.add_all(demo)
-        print('✅ Przykładowe produkty zostały dodane')
+        print('✅ Demo products added')
 
     db.session.commit()
 
@@ -717,7 +717,7 @@ with app.app_context():
 
 
 # ============================================================
-# START
+# ENTRYPOINT
 # ============================================================
 
 if __name__ == '__main__':
